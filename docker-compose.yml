@@ -1,0 +1,29 @@
+version: "3"
+services:
+  project-db:
+    build: .
+    image: project-db
+    depends_on:
+      - mongo
+    ports:
+      - "8000:8000"
+    links:
+      - mongo
+    environment:
+      - MONGO_URL=mongodb://mongo:27017
+      - PROJECT_DB_URL=:8000
+    restart: always
+
+  mongo:
+    build: ./mongo
+    image: mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      #- /c/Users/admin/mongodb-data/project-db:/data/db #change host data folder if needed
+      - mongodb-data:/data/db
+    #command: "--smallfiles --logpath=/dev/null --setParameter failIndexKeyTooLong=false"
+    restart: always
+
+volumes:
+  mongodb-data:
