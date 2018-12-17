@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	dbName              = "ProjectDB"
-	specsCollectionName = "specs"
+	dbName              = "hlc"
+	specsCollectionName = "accounts"
 )
 
 type MongoStore struct {

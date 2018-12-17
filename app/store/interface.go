@@ -4,6 +4,8 @@ import "hlc/app/models"
 
 type AccountsRepository interface {
 	FilterAccounts(query FilterQuery) (FilterResult, error)
+	GroupAccounts(query GroupsQuery) (GroupsResult, error)
+	CreateAccounts([]models.Account) (int, error)
 }
 
 type FilterQuery struct {
@@ -53,4 +55,8 @@ type GroupsResult struct {
 }
 
 type Group struct {
+	Keys
+	Count int `json:"count"`
 }
+
+type Keys map[string]string
