@@ -1,8 +1,6 @@
 package rest
 
 import (
-	"ProjectDB/app/models"
-	"ProjectDB/app/store"
 	"encoding/json"
 	"github.com/gorilla/mux"
 	"io"
