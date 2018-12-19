@@ -56,7 +56,11 @@ func (ms *MongoStore) CreateAccount(accounts []models.Account) (int, error) {
 }
 
 func (ms *MongoStore) FilterAccounts(query FilterQuery) (FilterResult, error) {
-
+	session, collection, err := ms.getSessionAndSpecsCollection()
+	if err != nil {
+		return FilterResult{}, err
+	}
+	defer session.Close()
 }
 
 func (ms *MongoStore) GetSpecs() ([]models.Spec, error) {

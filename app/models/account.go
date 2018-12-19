@@ -3,9 +3,9 @@ package models
 import "github.com/globalsign/mgo/bson"
 
 type Account struct {
-	MongoID   bson.ObjectId `json:"-"`
-	ID        uint32        `json:"id"`                   //unique
-	Email     string        `json:"email"`                //up to 100 symbols, unique
+	MongoID   bson.ObjectId `json:"-" bson:"_id"`
+	ID        uint32        `json:"id" bson:"id"`         //unique
+	Email     string        `json:"email" bson:"email"`   //up to 100 symbols, unique
 	FName     string        `json:"fname, omitempty"`     //up to 50 symbols, optional
 	SName     string        `json:"sname, omitempty"`     //up to 50 symbols, optional
 	Phone     string        `json:"phone, omitempty"`     //up to 16 symbols, unique, optional
