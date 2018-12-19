@@ -3,8 +3,8 @@ package store
 import "hlc/app/models"
 
 type AccountsRepository interface {
-	FilterAccounts(query FilterQuery) (FilterResult, error)
-	GroupAccounts(query GroupsQuery) (GroupsResult, error)
+	FilterAccounts(FilterQuery) (FilterResult, error)
+	GroupAccounts(GroupsQuery) (GroupsResult, error)
 	CreateAccounts([]models.Account) (int, error)
 }
 

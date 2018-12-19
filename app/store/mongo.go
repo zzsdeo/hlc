@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
+	"hlc/app/models"
 )
 
 const (
@@ -35,6 +36,27 @@ func (ms *MongoStore) getSessionAndSpecsCollection() (*mgo.Session, *mgo.Collect
 	specsCollection := session.DB(dbName).C(specsCollectionName)
 
 	return session, specsCollection, nil
+}
+
+func (ms *MongoStore) CreateAccount(accounts []models.Account) (int, error) {
+	session, collection, err := ms.getSessionAndSpecsCollection()
+	if err != nil {
+		return 0, err
+	}
+	defer session.Close()
+
+	for i, account := range accounts {
+		account.MongoID = bson.NewObjectId()
+		err = collection.Insert(&account)
+		if err != nil {
+			return i, err
+		}
+	}
+	return len(accounts), nil
+}
+
+func (ms *MongoStore) FilterAccounts(query FilterQuery) (FilterResult, error) {
+
 }
 
 func (ms *MongoStore) GetSpecs() ([]models.Spec, error) {
