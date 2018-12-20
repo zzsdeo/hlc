@@ -61,6 +61,41 @@ func (ms *MongoStore) FilterAccounts(query FilterQuery) (FilterResult, error) {
 		return FilterResult{}, err
 	}
 	defer session.Close()
+
+	queryMap := make(map[string]interface{})
+
+	if query.SexEq != "" {
+		queryMap["sex"] = query.SexEq
+	}
+
+	if query.EmailDomain != "" {
+		regex := make(map[string]string)
+		regex["$regex"] = query.EmailDomain
+		queryMap["email"] = regex
+	} else if query.EmailLt != "" {
+		lt := make(map[string]string)
+		lt["$lt"] = query.EmailLt
+		queryMap["email"] = lt
+	} else if query.EmailGt != "" {
+		gt := make(map[string]string)
+		gt["$gt"] = query.EmailGt
+		queryMap["email"] = gt
+	}
+
+	if query.StatusEq != "" {
+		eq := make(map[string]string)
+		eq["$eq"] = query.StatusEq
+		queryMap["status"] = eq
+	} else if query.StatusNeq != "" {
+		neq := make(map[string]string)
+		neq["$neq"] = query.StatusNeq
+		queryMap["status"] = neq
+	}
+
+	if query.FNameEq != "" {
+
+	}
+
 }
 
 func (ms *MongoStore) GetSpecs() ([]models.Spec, error) {

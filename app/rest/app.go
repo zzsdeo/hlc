@@ -2,6 +2,7 @@ package rest
 
 import (
 	"encoding/json"
+	"github.com/globalsign/mgo"
 	"github.com/gorilla/mux"
 	"io"
 	"log"
@@ -10,44 +11,30 @@ import (
 
 type App struct {
 	router          *mux.Router
-	specsRepository store.SpecsRepository
+	mongoSession *mgo.Session
 }
 
-//func (a *App) Initialize() {
-//	a.router = mux.NewRouter()
-//	s := store.MockStore{}
-//	s.Initialize()
-//	a.specsRepository = &s
-//	a.initializeRoutes()
-//}
-
-func (a *App) Initialize(url string) {
+func (a *App) Initialize(mongoAddr string) {
 	a.router = mux.NewRouter()
-	s := store.MongoStore{}
-	err := s.Initialize(url)
+
+	session, err := mgo.Dial(mongoAddr)
 	if err != nil {
-		//log.Fatal("[ERROR] ", err)
-		log.Println("[ERROR] ", err)
+		log.Fatal("[ERROR] ", err)
 	}
-	a.specsRepository = &s
+	a.mongoSession = session
+
 	a.initializeRoutes()
 }
 
-func (a *App) Run(url string) {
-	log.Println("[INFO] start server on", url)
-	log.Fatal("[ERROR] ", http.ListenAndServe(url, a.router))
+func (a *App) Run(listenAddr string) {
+	log.Println("[INFO] start server on", listenAddr)
+	log.Fatal("[ERROR] ", http.ListenAndServe(listenAddr, a.router))
 }
 
 func (a *App) initializeRoutes() {
-	a.router.HandleFunc("/api/v1/ping", a.ping).Methods(http.MethodGet)
-	a.router.HandleFunc("/api/v1/specs", a.getSpecs).Methods(http.MethodGet)
-	a.router.HandleFunc("/api/v1/specs/{id}", a.getSpec).Methods(http.MethodGet)
-	a.router.HandleFunc("/api/v1/specs", a.createSpec).Methods(http.MethodPost)
-	a.router.HandleFunc("/api/v1/specs/{id}", a.updateSpec).Methods(http.MethodPut)
-	a.router.HandleFunc("/api/v1/specs/{id}", a.deleteSpec).Methods(http.MethodDelete)
+	a.router.HandleFunc("/ping/", a.ping).Methods(http.MethodGet)
 
-	a.router.HandleFunc("/api/v1/specs/{id}/items", a.createItem).Methods(http.MethodPost)
-	//a.router.HandleFunc("/api/v1/specs/{id}/items/{item_id}", a.deleteItem).Methods(http.MethodDelete) todo
+	a.router.HandleFunc("/accounts/filter/", a.filter).Methods(http.MethodGet)
 }
 
 func (a *App) ping(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +44,76 @@ func (a *App) ping(w http.ResponseWriter, r *http.Request) {
 		log.Println("[ERROR] ", r, err)
 	}
 }
+
+func (a *App) filter(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	queryMap := make(map[string]interface{})
+
+	for k, v := range mux.Vars(r) {
+		switch k {
+		case "sex_eq":
+			queryMap["sex"] = v
+			continue
+		case "email_domain":
+			regex := make(map[string]string)
+			regex["$regex"] = v
+			queryMap["email"] = regex
+			continue
+		case "email_lt":
+			lt := make(map[string]string)
+			lt["$lt"] = v
+			queryMap["email"] = lt
+			continue
+		case "email_gt":
+			gt := make(map[string]string)
+			gt["$gt"] = v
+			queryMap["email"] = gt
+			continue
+		case "status_eq":
+			queryMap["status"] = v
+			continue
+		case "status_neq":
+			neq := make(map[string]string)
+			neq["$neq"] = v
+			queryMap["status"] = neq
+			continue
+		case "fname_eq":
+			queryMap["fname"] = v
+			continue
+		case "fname_any":
+
+			continue
+			case:"fname_null"
+			case:"sname_eq"
+			case:"sname_starts"
+			case:"sname_null"
+			case:"phone_code"
+			case:"phone_null"
+			case:"country_eq"
+			case:"country_null"
+			case:"city_eq"
+			case:"city_any"
+			case:"city_null"
+			case:"birth_lt"
+			case:"birth_gt"
+			case:"birth_year"
+			case:"interests_contains"
+			case:"interests_any"
+			case:"likes_contains"
+			case:"premium_now"
+			case:"premium_null"
+			case:"limit"
+		}
+	}
+
+}
+
+
+
+
+
+
 
 func (a *App) getSpecs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
