@@ -3,15 +3,30 @@ package rest
 import (
 	"encoding/json"
 	"github.com/globalsign/mgo"
+	"github.com/globalsign/mgo/bson"
 	"github.com/gorilla/mux"
+	"hlc/app/models"
 	"io"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
+)
+
+const (
+	dbName                 = "hlc"
+	accountsCollectionName = "accounts"
 )
 
 type App struct {
-	router          *mux.Router
+	router       *mux.Router
 	mongoSession *mgo.Session
+	now          int //current time from options.txt
+}
+
+type filterResponse struct {
+	Accounts []models.Account `json:"accounts"`
 }
 
 func (a *App) Initialize(mongoAddr string) {
@@ -23,7 +38,38 @@ func (a *App) Initialize(mongoAddr string) {
 	}
 	a.mongoSession = session
 
+	//todo make indexes
+
 	a.initializeRoutes()
+}
+
+func (a *App) SetNow(now int) {
+	a.now = now
+}
+
+func (a *App) DropCollection() {
+	session := a.mongoSession.Copy()
+	defer session.Close()
+	collection := session.DB(dbName).C(accountsCollectionName)
+	err := collection.DropCollection()
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+}
+
+func (a *App) LoadData(accounts []models.Account) {
+	session := a.mongoSession.Copy()
+	defer session.Close()
+	collection := session.DB(dbName).C(accountsCollectionName)
+
+	for i, account := range accounts {
+		account.MongoID = bson.NewObjectId()
+		err := collection.Insert(&account)
+		if err != nil {
+			log.Println("[ERROR] index=", i, err)
+		}
+	}
+	log.Println("[INFO] all accounts added")
 }
 
 func (a *App) Run(listenAddr string) {
@@ -48,7 +94,11 @@ func (a *App) ping(w http.ResponseWriter, r *http.Request) {
 func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	//todo validate params
+
 	queryMap := make(map[string]interface{})
+
+	var limit int
 
 	for k, v := range mux.Vars(r) {
 		switch k {
@@ -82,160 +132,151 @@ func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 			queryMap["fname"] = v
 			continue
 		case "fname_any":
-
+			in := make(map[string][]string)
+			in["$in"] = strings.Split(v, ",")
+			queryMap["fname"] = in
 			continue
-			case:"fname_null"
-			case:"sname_eq"
-			case:"sname_starts"
-			case:"sname_null"
-			case:"phone_code"
-			case:"phone_null"
-			case:"country_eq"
-			case:"country_null"
-			case:"city_eq"
-			case:"city_any"
-			case:"city_null"
-			case:"birth_lt"
-			case:"birth_gt"
-			case:"birth_year"
-			case:"interests_contains"
-			case:"interests_any"
-			case:"likes_contains"
-			case:"premium_now"
-			case:"premium_null"
-			case:"limit"
+		case "fname_null":
+			queryMap["fname"] = exists(v)
+			continue
+		case "sname_eq":
+			queryMap["sname"] = v
+			continue
+		case "sname_starts":
+			regex := make(map[string]string)
+			regex["$regex"] = "^" + v
+			queryMap["sname"] = regex
+			continue
+		case "sname_null":
+			queryMap["sname"] = exists(v)
+			continue
+		case "phone_code":
+			regex := make(map[string]string)
+			regex["$regex"] = "(" + v + ")"
+			queryMap["phone"] = regex
+			continue
+		case "phone_null":
+			queryMap["phone"] = exists(v)
+			continue
+		case "country_eq":
+			queryMap["country"] = v
+			continue
+		case "country_null":
+			queryMap["country"] = exists(v)
+			continue
+		case "city_eq":
+			queryMap["city"] = v
+			continue
+		case "city_any":
+			in := make(map[string][]string)
+			in["$in"] = strings.Split(v, ",")
+			queryMap["city"] = in
+			continue
+		case "city_null":
+			queryMap["city"] = exists(v)
+			continue
+		case "birth_lt":
+			lt := make(map[string]int)
+			lt["$lt"], _ = strconv.Atoi(v)
+			queryMap["birth"] = lt
+			continue
+		case "birth_gt":
+			gt := make(map[string]int)
+			gt["$gt"], _ = strconv.Atoi(v)
+			queryMap["birth"] = gt
+			continue
+		case "birth_year":
+			year, _ := strconv.Atoi(v)
+			interval := make(map[string]int64)
+			interval["$gte"] = time.Date(year, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
+			interval["$lt"] = time.Date(year+1, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
+			queryMap["birth"] = interval
+			continue
+		case "interests_contains":
+			all := make(map[string][]string)
+			all["$all"] = strings.Split(v, ",")
+			queryMap["interests"] = all
+			continue
+		case "interests_any":
+			elemMatch := make(map[string]map[string][]string)
+			in := make(map[string][]string)
+			in["$in"] = strings.Split(v, ",")
+			elemMatch["$elemMatch"] = in
+			queryMap["interests"] = elemMatch
+			continue
+		case "likes_contains":
+			//mongo find {likes: {id: {$in: [1, 2, 3]}}}
+			likes := strings.Split(v, ",")
+			likeIds := make([]int, len(likes))
+			for _, like := range likes {
+				l, _ := strconv.Atoi(like)
+				likeIds = append(likeIds, l)
+			}
+			in := make(map[string][]int)
+			in["$in"] = likeIds
+			like := make(map[string]map[string][]int)
+			like["id"] = in
+			queryMap["likes"] = like
+			continue
+		case "premium_now":
+			//mongo find {premium: {$and: [{start: {$lt: 123}}, {finish: {$gt: 123}}]}}
+			lt := make(map[string]int)
+			lt["$lt"] = a.now
+			gt := make(map[string]int)
+			gt["$gt"] = a.now
+			start := make(map[string]map[string]int)
+			start["start"] = lt
+			finish := make(map[string]map[string]int)
+			finish["finish"] = gt
+			and := make(map[string][]map[string]map[string]int)
+			interval := make([]map[string]map[string]int, 2)
+			interval = append(interval, start, finish)
+			and["$and"] = interval
+			queryMap["premium"] = and
+			continue
+		case "premium_null":
+			queryMap["premium"] = exists(v)
+			continue
+		case "limit":
+			limit, _ = strconv.Atoi(v)
 		}
 	}
 
+	session := a.mongoSession.Copy()
+	defer session.Close()
+	collection := session.DB(dbName).C(accountsCollectionName)
+
+	selector := make(map[string]int)
+
+	for k, _ := range queryMap {
+		selector[k] = 1
+	}
+
+	filterResponse := filterResponse{}
+
+	err := collection.Find(queryMap).Limit(limit).Sort("id").Select(selector).All(&filterResponse.Accounts)
+
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	err = json.NewEncoder(w).Encode(filterResponse)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("[ERROR] ", err)
+	}
+
 }
 
-
-
-
-
-
-
-func (a *App) getSpecs(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	specs, err := a.specsRepository.GetSpecs()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("[ERROR] ", r, err)
+func exists(v string) map[string]bool {
+	exists := make(map[string]bool)
+	switch v {
+	case "0":
+		exists["$exists"] = true
+		return exists
+	case "1":
+		exists["$exists"] = false
+		return exists
 	}
-
-	err = json.NewEncoder(w).Encode(specs)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("[ERROR] ", r, err)
-	}
-}
-
-func (a *App) getSpec(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	params := mux.Vars(r)
-
-	spec, err := a.specsRepository.GetSpec(params["id"])
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		log.Println("[ERROR] ", r, err)
-		return
-	}
-
-	err = json.NewEncoder(w).Encode(spec)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("[ERROR] ", r, err)
-	}
-}
-
-func (a *App) createSpec(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	var encodedSpec models.Spec
-	err := json.NewDecoder(r.Body).Decode(&encodedSpec)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("[ERROR] ", r, err)
-		return
-	}
-
-	spec, err := a.specsRepository.CreateSpec(encodedSpec)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("[ERROR] ", r, encodedSpec, err)
-		return
-	}
-
-	err = json.NewEncoder(w).Encode(spec)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("[ERROR] ", r, spec, err)
-	}
-}
-
-func (a *App) updateSpec(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	var encodedSpec models.Spec
-	err := json.NewDecoder(r.Body).Decode(&encodedSpec)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("[ERROR] ", r, err)
-		return
-	}
-
-	spec, err := a.specsRepository.UpdateSpec(encodedSpec)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("[ERROR] ", r, spec, err)
-		return
-	}
-
-	err = json.NewEncoder(w).Encode(spec)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("[ERROR] ", r, spec, err)
-	}
-}
-
-func (a *App) deleteSpec(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	params := mux.Vars(r)
-
-	err := a.specsRepository.DeleteSpec(params["id"])
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("[ERROR] ", r, err)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-}
-
-func (a *App) createItem(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	var encodedItem models.Item
-	err := json.NewDecoder(r.Body).Decode(&encodedItem)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("[ERROR] ", r, err)
-		return
-	}
-
-	params := mux.Vars(r)
-
-	item, err := a.specsRepository.CreateItem(params["id"], encodedItem)
-
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("[ERROR] ", r, item, err)
-		return
-	}
-
-	err = json.NewEncoder(w).Encode(item)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("[ERROR] ", r, item, err)
-	}
+	return nil
 }
