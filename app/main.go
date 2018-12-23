@@ -1,20 +1,25 @@
 package main
 
 import (
+	"archive/zip"
+	"bufio"
+	"encoding/json"
+	"hlc/app/models"
 	"hlc/app/rest"
-	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
 )
 
 const (
 	mongoAddrEnvName = "MONGO_ADDR"
-	defaultMongoAddr = "mongodb://localhost:27017"
+	defaultMongoAddr = "mongodb://:27017"
 
 	listenAddrEnvName = "SERVER_ADDR"
-	defaultListenAddr = "localhost:8000"
+	defaultListenAddr = ":80"
 
-	optionsFilePath = "/tmp/data/options.txt"
+	optionsFilePath = "./tmp/data/options.txt" //todo for docker without dot
+	dataFilePath    = "./tmp/data/data.zip"    //todo for docker without dot
 )
 
 type opts struct {
@@ -34,6 +39,8 @@ func main() {
 
 	app.DropCollection()
 
+	app.LoadData(parseData().Accounts)
+
 	app.Run(opts.listenAddr)
 }
 
@@ -50,10 +57,55 @@ func parseOpts() opts {
 		opts.listenAddr = defaultListenAddr
 	}
 
-	b, err := ioutil.ReadFile(optionsFilePath)
+	file, err := os.Open(optionsFilePath)
 	if err != nil {
-		log.Println("[ERROR] ", err)
+		log.Fatal("[ERROR] ", err)
+	}
+	defer func() {
+		err = file.Close()
+		if err != nil {
+			log.Println("[ERROR] ", err)
+		}
+	}()
+
+	scanner := bufio.NewScanner(file)
+	scanner.Scan()
+	opts.now, _ = strconv.Atoi(scanner.Text())
+
+	log.Println("[DEBUG] ", opts)
+	return opts
+}
+
+func parseData() models.Accounts {
+	r, err := zip.OpenReader(dataFilePath)
+	if err != nil {
+		log.Fatal("[ERROR] ", err)
 	}
 
-	return opts
+	defer func() {
+		err = r.Close()
+		if err != nil {
+			log.Println("[ERROR] ", err)
+		}
+	}()
+
+	file, err := r.File[0].Open()
+	if err != nil {
+		log.Fatal("[ERROR] ", err)
+	}
+	defer func() {
+		err = file.Close()
+		if err != nil {
+			log.Println("[ERROR] ", err)
+		}
+	}()
+
+	accounts := models.Accounts{}
+
+	err = json.NewDecoder(file).Decode(&accounts)
+	if err != nil {
+		log.Fatal("[ERROR] ", err)
+	}
+
+	return accounts
 }

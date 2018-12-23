@@ -25,10 +25,6 @@ type App struct {
 	now          int //current time from options.txt
 }
 
-type filterResponse struct {
-	Accounts []models.Account `json:"accounts"`
-}
-
 func (a *App) Initialize(mongoAddr string) {
 	a.router = mux.NewRouter()
 
@@ -94,99 +90,97 @@ func (a *App) ping(w http.ResponseWriter, r *http.Request) {
 func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	//todo validate params
-
 	queryMap := make(map[string]interface{})
 
 	var limit int
 
-	for k, v := range mux.Vars(r) {
+	for k, v := range r.URL.Query() {
 		switch k {
 		case "sex_eq":
-			queryMap["sex"] = v
+			queryMap["sex"] = v[0]
 			continue
 		case "email_domain":
 			regex := make(map[string]string)
-			regex["$regex"] = v
+			regex["$regex"] = "(@" + v[0] + ")"
 			queryMap["email"] = regex
 			continue
 		case "email_lt":
 			lt := make(map[string]string)
-			lt["$lt"] = v
+			lt["$lt"] = v[0]
 			queryMap["email"] = lt
 			continue
 		case "email_gt":
 			gt := make(map[string]string)
-			gt["$gt"] = v
+			gt["$gt"] = v[0]
 			queryMap["email"] = gt
 			continue
 		case "status_eq":
-			queryMap["status"] = v
+			queryMap["status"] = v[0]
 			continue
 		case "status_neq":
-			neq := make(map[string]string)
-			neq["$neq"] = v
-			queryMap["status"] = neq
+			ne := make(map[string]string)
+			ne["$ne"] = v[0]
+			queryMap["status"] = ne
 			continue
 		case "fname_eq":
-			queryMap["fname"] = v
+			queryMap["fname"] = v[0]
 			continue
 		case "fname_any":
 			in := make(map[string][]string)
-			in["$in"] = strings.Split(v, ",")
+			in["$in"] = strings.Split(v[0], ",")
 			queryMap["fname"] = in
 			continue
 		case "fname_null":
-			queryMap["fname"] = exists(v)
+			queryMap["fname"] = exists(v[0])
 			continue
 		case "sname_eq":
-			queryMap["sname"] = v
+			queryMap["sname"] = v[0]
 			continue
 		case "sname_starts":
 			regex := make(map[string]string)
-			regex["$regex"] = "^" + v
+			regex["$regex"] = "^" + v[0]
 			queryMap["sname"] = regex
 			continue
 		case "sname_null":
-			queryMap["sname"] = exists(v)
+			queryMap["sname"] = exists(v[0])
 			continue
 		case "phone_code":
 			regex := make(map[string]string)
-			regex["$regex"] = "(" + v + ")"
+			regex["$regex"] = "(\\(" + v[0] + "\\))"
 			queryMap["phone"] = regex
 			continue
 		case "phone_null":
-			queryMap["phone"] = exists(v)
+			queryMap["phone"] = exists(v[0])
 			continue
 		case "country_eq":
-			queryMap["country"] = v
+			queryMap["country"] = v[0]
 			continue
 		case "country_null":
-			queryMap["country"] = exists(v)
+			queryMap["country"] = exists(v[0])
 			continue
 		case "city_eq":
-			queryMap["city"] = v
+			queryMap["city"] = v[0]
 			continue
 		case "city_any":
 			in := make(map[string][]string)
-			in["$in"] = strings.Split(v, ",")
+			in["$in"] = strings.Split(v[0], ",")
 			queryMap["city"] = in
 			continue
 		case "city_null":
-			queryMap["city"] = exists(v)
+			queryMap["city"] = exists(v[0])
 			continue
 		case "birth_lt":
 			lt := make(map[string]int)
-			lt["$lt"], _ = strconv.Atoi(v)
+			lt["$lt"], _ = strconv.Atoi(v[0])
 			queryMap["birth"] = lt
 			continue
 		case "birth_gt":
 			gt := make(map[string]int)
-			gt["$gt"], _ = strconv.Atoi(v)
+			gt["$gt"], _ = strconv.Atoi(v[0])
 			queryMap["birth"] = gt
 			continue
 		case "birth_year":
-			year, _ := strconv.Atoi(v)
+			year, _ := strconv.Atoi(v[0])
 			interval := make(map[string]int64)
 			interval["$gte"] = time.Date(year, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
 			interval["$lt"] = time.Date(year+1, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
@@ -194,70 +188,92 @@ func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 			continue
 		case "interests_contains":
 			all := make(map[string][]string)
-			all["$all"] = strings.Split(v, ",")
+			all["$all"] = strings.Split(v[0], ",")
 			queryMap["interests"] = all
 			continue
 		case "interests_any":
 			elemMatch := make(map[string]map[string][]string)
 			in := make(map[string][]string)
-			in["$in"] = strings.Split(v, ",")
+			in["$in"] = strings.Split(v[0], ",")
 			elemMatch["$elemMatch"] = in
 			queryMap["interests"] = elemMatch
 			continue
 		case "likes_contains":
-			//mongo find {likes: {id: {$in: [1, 2, 3]}}}
-			likes := strings.Split(v, ",")
-			likeIds := make([]int, len(likes))
+			likes := strings.Split(v[0], ",")
+			likeIds := make([]int, 0)
 			for _, like := range likes {
 				l, _ := strconv.Atoi(like)
 				likeIds = append(likeIds, l)
 			}
-			in := make(map[string][]int)
-			in["$in"] = likeIds
+			//log.Println("[DEBUG] ", likeIds)
+			all := make(map[string][]int)
+			all["$all"] = likeIds
 			like := make(map[string]map[string][]int)
-			like["id"] = in
-			queryMap["likes"] = like
+			like["id"] = all
+			elemMatch := make(map[string]map[string]map[string][]int)
+			elemMatch["$elemMatch"] = like
+			queryMap["likes"] = elemMatch
 			continue
 		case "premium_now":
-			//mongo find {premium: {$and: [{start: {$lt: 123}}, {finish: {$gt: 123}}]}}
+			//mongo find {"$and":["premium.start":{"$lt": 123}, "premium.finish":{"$gt": 123}]}
 			lt := make(map[string]int)
 			lt["$lt"] = a.now
 			gt := make(map[string]int)
 			gt["$gt"] = a.now
 			start := make(map[string]map[string]int)
-			start["start"] = lt
+			start["premium.start"] = lt
 			finish := make(map[string]map[string]int)
-			finish["finish"] = gt
-			and := make(map[string][]map[string]map[string]int)
-			interval := make([]map[string]map[string]int, 2)
+			finish["premium.finish"] = gt
+			interval := make([]map[string]map[string]int, 0)
 			interval = append(interval, start, finish)
-			and["$and"] = interval
-			queryMap["premium"] = and
+			queryMap["$and"] = interval
 			continue
 		case "premium_null":
-			queryMap["premium"] = exists(v)
+			queryMap["premium"] = exists(v[0])
 			continue
 		case "limit":
-			limit, _ = strconv.Atoi(v)
+			var err error
+			limit, err = strconv.Atoi(v[0])
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		case "query_id":
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
 	}
+
+	//log.Println("[DEBUG] queryMap=", queryMap)
+	//log.Println("[DEBUG] limit=", limit)
 
 	session := a.mongoSession.Copy()
 	defer session.Close()
 	collection := session.DB(dbName).C(accountsCollectionName)
 
 	selector := make(map[string]int)
-
+	selector["id"] = 1
+	selector["email"] = 1
 	for k, _ := range queryMap {
-		selector[k] = 1
+		if k != "interests" && k != "likes" {
+			if k == "$and" {
+				selector["premium"] = 1
+			} else {
+				selector[k] = 1
+			}
+		}
 	}
 
-	filterResponse := filterResponse{}
+	//log.Println("[DEBUG] selector=", selector)
 
-	err := collection.Find(queryMap).Limit(limit).Sort("id").Select(selector).All(&filterResponse.Accounts)
+	filterResponse := models.Accounts{}
+	filterResponse.Accounts = make([]models.Account, 0)
+
+	err := collection.Find(queryMap).Limit(limit).Sort("-id").Select(selector).All(&filterResponse.Accounts)
 
 	if err != nil {
-		log.Println("[ERROR] ", err)
+		log.Println("[ERROR] ", err, queryMap)
 	}
 
 	err = json.NewEncoder(w).Encode(filterResponse)
