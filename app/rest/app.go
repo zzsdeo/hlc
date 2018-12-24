@@ -284,6 +284,59 @@ func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func (a *App) group(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	queryMap := make(map[string]interface{})
+
+	var limit int
+
+	for k, v := range r.URL.Query() {
+		switch k {
+		case "id": //todo
+		case "email":
+			queryMap["email"] = v[0]
+		case "fname":
+			queryMap["fname"] = v[0]
+		case "sname":
+			queryMap["sname"] = v[0]
+		case "phone":
+			queryMap["phone"] = v[0]
+		case "sex":
+			queryMap["sex"] = v[0]
+		case "birth":
+			queryMap["birth"] = v[0]
+		case "country":
+			queryMap["country"] = v[0]
+		case "city":
+			queryMap["city"] = v[0]
+		case "joined":
+			queryMap["joined"] = v[0]
+		case "status":
+			queryMap["status"] = v[0]
+		case "interests":
+			queryMap["interests"] = v[0]
+		case "premium":
+			queryMap["premium"] = v[0]
+		case "likes":
+			queryMap["likes"] = v[0]
+		case "limit":
+			var err error
+			limit, err = strconv.Atoi(v[0])
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		case "query_id":
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+			return
+
+		}
+
+	}
+}
+
 func exists(v string) map[string]bool {
 	exists := make(map[string]bool)
 	switch v {
