@@ -171,16 +171,33 @@ func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 			continue
 		case "birth_lt":
 			lt := make(map[string]int)
-			lt["$lt"], _ = strconv.Atoi(v[0])
+			var err error
+			lt["$lt"], err = strconv.Atoi(v[0])
+			if err != nil {
+				log.Println("[ERROR] ", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
 			queryMap["birth"] = lt
 			continue
 		case "birth_gt":
 			gt := make(map[string]int)
-			gt["$gt"], _ = strconv.Atoi(v[0])
+			var err error
+			gt["$gt"], err = strconv.Atoi(v[0])
+			if err != nil {
+				log.Println("[ERROR] ", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
 			queryMap["birth"] = gt
 			continue
 		case "birth_year":
-			year, _ := strconv.Atoi(v[0])
+			year, err := strconv.Atoi(v[0])
+			if err != nil {
+				log.Println("[ERROR] ", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
 			interval := make(map[string]int64)
 			interval["$gte"] = time.Date(year, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
 			interval["$lt"] = time.Date(year+1, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
@@ -202,7 +219,12 @@ func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 			likes := strings.Split(v[0], ",")
 			likeIds := make([]int, 0)
 			for _, like := range likes {
-				l, _ := strconv.Atoi(like)
+				l, err := strconv.Atoi(like)
+				if err != nil { //todo check it
+					log.Println("[ERROR] ", err)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
 				likeIds = append(likeIds, l)
 			}
 			//log.Println("[DEBUG] ", likeIds)
@@ -235,6 +257,7 @@ func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 			var err error
 			limit, err = strconv.Atoi(v[0])
 			if err != nil {
+				log.Println("[ERROR] ", err)
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
@@ -305,7 +328,16 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 		case "sex":
 			queryMap["sex"] = v[0]
 		case "birth":
-			queryMap["birth"] = v[0]
+			year, err := strconv.Atoi(v[0])
+			if err != nil {
+				log.Println("[ERROR] ", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			interval := make(map[string]int64)
+			interval["$gte"] = time.Date(year, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
+			interval["$lt"] = time.Date(year+1, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
+			queryMap["birth"] = interval
 		case "country":
 			queryMap["country"] = v[0]
 		case "city":
@@ -348,4 +380,8 @@ func exists(v string) map[string]bool {
 		return exists
 	}
 	return nil
+}
+
+func xz(v string) {
+
 }
