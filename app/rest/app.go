@@ -17,6 +17,7 @@ import (
 const (
 	dbName                 = "hlc"
 	accountsCollectionName = "accounts"
+	batchSize              = 5000
 )
 
 type App struct {
@@ -58,14 +59,50 @@ func (a *App) LoadData(accounts []models.Account) {
 	defer session.Close()
 	collection := session.DB(dbName).C(accountsCollectionName)
 
-	for i, account := range accounts {
+	data := make([]interface{}, 0)
+	for _, account := range accounts {
 		account.MongoID = bson.NewObjectId()
-		err := collection.Insert(&account)
+		data = append(data, account)
+	}
+
+	log.Println("[DEBUG] len(data)=", len(data))
+
+	var batches [][]interface{}
+	for batchSize < len(data) {
+		data, batches = data[batchSize:], append(batches, data[0:batchSize:batchSize])
+	}
+	batches = append(batches, data)
+
+	for _, batch := range batches {
+		bulk := collection.Bulk()
+		bulk.Insert(batch...)
+		_, err := bulk.Run()
 		if err != nil {
-			log.Println("[ERROR] index=", i, err)
+			log.Println("[ERROR] ", err)
 		}
 	}
+
+	//err := collection.Insert(data...)
+
+	//for i, account := range accounts {
+	//	account.MongoID = bson.NewObjectId()
+	//	err := collection.Insert(&account)
+	//	if err != nil {
+	//		log.Println("[ERROR] index=", i, err)
+	//	}
+	//}
 	log.Println("[INFO] all accounts added")
+}
+
+func (a *App) CheckDB() {
+	session := a.mongoSession.Copy()
+	defer session.Close()
+	collection := session.DB(dbName).C(accountsCollectionName)
+	recs, err := collection.Find(nil).Count()
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+	log.Println("[INFO] recs added=", recs)
 }
 
 func (a *App) Run(listenAddr string) {
@@ -420,6 +457,8 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 			}
 
 		}
+
+		_ = limit
 	}
 }
 

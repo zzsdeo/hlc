@@ -41,6 +41,8 @@ func main() {
 
 	app.LoadData(parseData().Accounts)
 
+	app.CheckDB()
+
 	app.Run(opts.listenAddr)
 }
 
