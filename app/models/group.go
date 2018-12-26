@@ -1,5 +1,7 @@
 package models
 
+var Keys = map[string]bool{"sex": true, "status": true, "interests": true, "country": true, "city": true}
+
 type Group struct {
 	Sex       string `json:"sex,omitempty"`
 	Status    string `json:"status,omitempty"`

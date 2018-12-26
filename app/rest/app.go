@@ -198,10 +198,7 @@ func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			interval := make(map[string]int64)
-			interval["$gte"] = time.Date(year, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
-			interval["$lt"] = time.Date(year+1, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
-			queryMap["birth"] = interval
+			queryMap["birth"] = yearInterval(year)
 			continue
 		case "interests_contains":
 			all := make(map[string][]string)
@@ -314,9 +311,13 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 
 	var limit int
 
+	var order string
+
+	keys := make([]string, 0)
+
 	for k, v := range r.URL.Query() {
 		switch k {
-		case "id": //todo
+		//case "id": todo
 		case "email":
 			queryMap["email"] = v[0]
 		case "fname":
@@ -334,30 +335,62 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			interval := make(map[string]int64)
-			interval["$gte"] = time.Date(year, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
-			interval["$lt"] = time.Date(year+1, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
-			queryMap["birth"] = interval
+			queryMap["birth"] = yearInterval(year)
 		case "country":
 			queryMap["country"] = v[0]
 		case "city":
 			queryMap["city"] = v[0]
 		case "joined":
-			queryMap["joined"] = v[0]
+			year, err := strconv.Atoi(v[0])
+			if err != nil {
+				log.Println("[ERROR] ", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			queryMap["joined"] = yearInterval(year)
 		case "status":
 			queryMap["status"] = v[0]
 		case "interests":
-			queryMap["interests"] = v[0]
-		case "premium":
-			queryMap["premium"] = v[0]
+			elemMatch := make(map[string]string)
+			elemMatch["$elemMatch"] = v[0]
+			queryMap["interests"] = elemMatch
+		//case "premium": todo
+		//queryMap["premium"] = v[0]
 		case "likes":
-			queryMap["likes"] = v[0]
+			elemMatch := make(map[string]string)
+			elemMatch["$elemMatch"] = v[0]
+			like := make(map[string]map[string]string)
+			like["id"] = elemMatch
+			queryMap["likes"] = like
 		case "limit":
 			var err error
 			limit, err = strconv.Atoi(v[0])
 			if err != nil {
 				w.WriteHeader(http.StatusBadRequest)
 				return
+			}
+		case "order":
+			order = v[0]
+			if order == "" {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			if order != "-1" && order != "1" {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		case "keys":
+			keys = strings.Split(v[0], ",")
+			if len(keys) == 0 {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			for _, key := range keys {
+				if _, ok := models.Keys[key]; !ok {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
 			}
 		case "query_id":
 		default:
@@ -366,6 +399,27 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 
 		}
 
+		session := a.mongoSession.Copy()
+		defer session.Close()
+		collection := session.DB(dbName).C(accountsCollectionName)
+
+		var distinct []string
+		for _, key := range keys {
+			if key != "sex" && key != "status" {
+				err := collection.Find(queryMap).Distinct(key, &distinct)
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					log.Println("[ERROR] ", err)
+					return
+				}
+
+				for _, s := range distinct {
+					queryMap[key] = s
+					//err = collection.Find(queryMap).Limit(limit)
+				}
+			}
+
+		}
 	}
 }
 
@@ -382,6 +436,9 @@ func exists(v string) map[string]bool {
 	return nil
 }
 
-func xz(v string) {
-
+func yearInterval(year int) map[string]int64 {
+	interval := make(map[string]int64)
+	interval["$gte"] = time.Date(year, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
+	interval["$lt"] = time.Date(year+1, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
+	return interval
 }
