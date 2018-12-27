@@ -37,22 +37,22 @@ func main() {
 
 	app.SetNow(opts.now)
 
-	app.DropCollection()
+	//app.DropCollection()
 
-	r, err := readZip()
-	if err != nil {
-		log.Fatal("[ERROR] ", err)
-	}
-
-	for _, file := range r.File {
-		data, err := parseData(file)
-		if err != nil {
-			log.Fatal("[ERROR] ", err)
-		}
-		app.LoadData(data.Accounts)
-	}
-
-	app.CheckDB()
+	//r, err := readZip()
+	//if err != nil {
+	//	log.Fatal("[ERROR] ", err)
+	//}
+	//
+	//for _, file := range r.File {
+	//	data, err := parseData(file)
+	//	if err != nil {
+	//		log.Fatal("[ERROR] ", err)
+	//	}
+	//	app.LoadData(data.Accounts)
+	//}
+	//
+	//app.CheckDB()
 
 	app.Run(opts.listenAddr)
 }
@@ -117,37 +117,3 @@ func parseData(f *zip.File) (models.Accounts, error) {
 
 	return accounts, nil
 }
-
-//func parseData() models.Accounts {
-//	r, err := zip.OpenReader(dataFilePath)
-//	if err != nil {
-//		log.Fatal("[ERROR] ", err)
-//	}
-//
-//	defer func() {
-//		err = r.Close()
-//		if err != nil {
-//			log.Println("[ERROR] ", err)
-//		}
-//	}()
-//
-//	file, err := r.File[0].Open()
-//	if err != nil {
-//		log.Fatal("[ERROR] ", err)
-//	}
-//	defer func() {
-//		err = file.Close()
-//		if err != nil {
-//			log.Println("[ERROR] ", err)
-//		}
-//	}()
-//
-//	accounts := models.Accounts{}
-//
-//	err = json.NewDecoder(file).Decode(&accounts)
-//	if err != nil {
-//		log.Fatal("[ERROR] ", err)
-//	}
-//
-//	return accounts
-//}

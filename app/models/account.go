@@ -1,7 +1,6 @@
 package models
 
 type Account struct {
-	//MongoID   bson.ObjectId `json:"-" bson:"_id"`
 	ID        uint32   `json:"id,omitempty" bson:"id,omitempty"`               //unique
 	Email     string   `json:"email,omitempty" bson:"email,omitempty"`         //up to 100 symbols, unique
 	FName     string   `json:"fname,omitempty" bson:"fname,omitempty"`         //up to 50 symbols, optional

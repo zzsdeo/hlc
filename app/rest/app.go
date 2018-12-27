@@ -17,7 +17,6 @@ import (
 const (
 	dbName                 = "hlc"
 	accountsCollectionName = "accounts"
-	//batchSize              = 5000
 )
 
 type App struct {
@@ -59,33 +58,7 @@ func (a *App) LoadData(accounts []models.Account) {
 	defer session.Close()
 	collection := session.DB(dbName).C(accountsCollectionName)
 
-	//data := make([]interface{}, 0)
-	//for _, account := range accounts {
-	//	account.MongoID = bson.NewObjectId()
-	//	data = append(data, account)
-	//}
-	//
-	//log.Println("[DEBUG] len(data)=", len(data))
-	//
-	//var batches [][]interface{}
-	//for batchSize < len(data) {
-	//	data, batches = data[batchSize:], append(batches, data[0:batchSize:batchSize])
-	//}
-	//batches = append(batches, data)
-	//
-	//for _, batch := range batches {
-	//	bulk := collection.Bulk()
-	//	bulk.Insert(batch...)
-	//	_, err := bulk.Run()
-	//	if err != nil {
-	//		log.Println("[ERROR] ", err)
-	//	}
-	//}
-
-	//err := collection.Insert(data...)
-
 	for i, account := range accounts {
-		//account.MongoID = bson.NewObjectId()
 		err := collection.Insert(&account)
 		if err != nil {
 			log.Println("[ERROR] index=", i, err)
@@ -114,6 +87,7 @@ func (a *App) initializeRoutes() {
 	a.router.HandleFunc("/ping/", a.ping).Methods(http.MethodGet)
 
 	a.router.HandleFunc("/accounts/filter/", a.filter).Methods(http.MethodGet)
+	a.router.HandleFunc("/accounts/group/", a.group).Methods(http.MethodGet)
 }
 
 func (a *App) ping(w http.ResponseWriter, r *http.Request) {
@@ -254,7 +228,7 @@ func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 			likeIds := make([]int, 0)
 			for _, like := range likes {
 				l, err := strconv.Atoi(like)
-				if err != nil { //todo check it
+				if err != nil {
 					log.Println("[ERROR] ", err)
 					w.WriteHeader(http.StatusBadRequest)
 					return
@@ -352,15 +326,6 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 
 	for k, v := range r.URL.Query() {
 		switch k {
-		//case "id": todo
-		case "email":
-			queryMap["email"] = v[0]
-		case "fname":
-			queryMap["fname"] = v[0]
-		case "sname":
-			queryMap["sname"] = v[0]
-		case "phone":
-			queryMap["phone"] = v[0]
 		case "sex":
 			queryMap["sex"] = v[0]
 		case "birth":
@@ -386,15 +351,17 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 		case "status":
 			queryMap["status"] = v[0]
 		case "interests":
-			elemMatch := make(map[string]string)
-			elemMatch["$elemMatch"] = v[0]
+			regex := make(map[string]string)
+			regex["$regex"] = v[0] //todo try without regex
+			elemMatch := make(map[string]map[string]string)
+			elemMatch["$elemMatch"] = regex
 			queryMap["interests"] = elemMatch
-		//case "premium": todo
-		//queryMap["premium"] = v[0]
 		case "likes":
-			elemMatch := make(map[string]string)
-			elemMatch["$elemMatch"] = v[0]
-			like := make(map[string]map[string]string)
+			regex := make(map[string]string)
+			regex["$regex"] = v[0] //todo try without regex
+			elemMatch := make(map[string]map[string]string)
+			elemMatch["$elemMatch"] = regex
+			like := make(map[string]map[string]map[string]string)
 			like["id"] = elemMatch
 			queryMap["likes"] = like
 		case "limit":
@@ -439,52 +406,58 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 			return
 
 		}
+	}
 
-		session := a.mongoSession.Copy()
-		defer session.Close()
-		collection := session.DB(dbName).C(accountsCollectionName)
+	session := a.mongoSession.Copy()
+	defer session.Close()
+	collection := session.DB(dbName).C(accountsCollectionName)
 
-		groups := models.Groups{}
-		group := models.Group{}    //todo check
-		for _, key := range keys { //todo goroutines??
-
-			pipeline := []bson.M{
-				{"$match": queryMap},
-				{"$project": key},
-				{"$group": bson.M{key: "$" + key}, "count": bson.M{"$sum": 1}},
-				{"$sort": bson.M{"$count": order}},
-				{"$limit": limit},
-			}
-
-			err := collection.Pipe(pipeline).One(&group)
-			if err != nil {
-				log.Println("[ERROR] ", err)
-				continue
-			}
-
-			groups.Groups = append(groups.Groups, group)
+	groups := models.Groups{}
+	groups.Groups = make([]models.Group, 0)
+	group := models.Group{}    //todo check
+	for _, key := range keys { //todo goroutines??
+		pipeline := []bson.M{
+			{"$match": queryMap},
+			{"$group": bson.M{"_id": bson.M{key: "$" + key, "count": bson.M{"$sum": 1}}}},
+			{"$project": bson.M{"_id": 0, key: "$" + key, "count": 1}},
+			//{"$sort": bson.M{"$count": order}},
+			{"$limit": limit},
 		}
 
-		//var distinct []string
-		//for _, key := range keys {
-		//	if key != "sex" && key != "status" {
-		//		err := collection.Find(queryMap).Distinct(key, &distinct)
-		//		if err != nil {
-		//			w.WriteHeader(http.StatusInternalServerError)
-		//			log.Println("[ERROR] ", err)
-		//			return
-		//		}
-		//
-		//		for _, s := range distinct {
-		//			queryMap[key] = s
-		//			//err = collection.Find(queryMap).Limit(limit)
-		//		}
-		//	}
-		//
-		//}
-		//
-		//_ = limit
+		err := collection.Pipe(pipeline).One(&group)
+		if err != nil {
+			log.Println("[ERROR] ", err)
+			continue
+		}
+
+		groups.Groups = append(groups.Groups, group)
 	}
+
+	err := json.NewEncoder(w).Encode(groups)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("[ERROR] ", err)
+	}
+
+	//var distinct []string
+	//for _, key := range keys {
+	//	if key != "sex" && key != "status" {
+	//		err := collection.Find(queryMap).Distinct(key, &distinct)
+	//		if err != nil {
+	//			w.WriteHeader(http.StatusInternalServerError)
+	//			log.Println("[ERROR] ", err)
+	//			return
+	//		}
+	//
+	//		for _, s := range distinct {
+	//			queryMap[key] = s
+	//			//err = collection.Find(queryMap).Limit(limit)
+	//		}
+	//	}
+	//
+	//}
+	//
+	_ = limit
 }
 
 func exists(v string) map[string]bool {
