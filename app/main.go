@@ -39,7 +39,18 @@ func main() {
 
 	app.DropCollection()
 
-	app.LoadData(parseData().Accounts)
+	r, err := readZip()
+	if err != nil {
+		log.Fatal("[ERROR] ", err)
+	}
+
+	for _, file := range r.File {
+		data, err := parseData(file)
+		if err != nil {
+			log.Fatal("[ERROR] ", err)
+		}
+		app.LoadData(data.Accounts)
+	}
 
 	app.CheckDB()
 
@@ -78,22 +89,19 @@ func parseOpts() opts {
 	return opts
 }
 
-func parseData() models.Accounts {
+func readZip() (*zip.ReadCloser, error) {
 	r, err := zip.OpenReader(dataFilePath)
 	if err != nil {
-		log.Fatal("[ERROR] ", err)
+		return nil, err
 	}
+	return r, nil
+}
 
-	defer func() {
-		err = r.Close()
-		if err != nil {
-			log.Println("[ERROR] ", err)
-		}
-	}()
-
-	file, err := r.File[0].Open()
+func parseData(f *zip.File) (models.Accounts, error) {
+	accounts := models.Accounts{}
+	file, err := f.Open()
 	if err != nil {
-		log.Fatal("[ERROR] ", err)
+		return accounts, err
 	}
 	defer func() {
 		err = file.Close()
@@ -102,12 +110,44 @@ func parseData() models.Accounts {
 		}
 	}()
 
-	accounts := models.Accounts{}
-
 	err = json.NewDecoder(file).Decode(&accounts)
 	if err != nil {
-		log.Fatal("[ERROR] ", err)
+		return accounts, err
 	}
 
-	return accounts
+	return accounts, nil
 }
+
+//func parseData() models.Accounts {
+//	r, err := zip.OpenReader(dataFilePath)
+//	if err != nil {
+//		log.Fatal("[ERROR] ", err)
+//	}
+//
+//	defer func() {
+//		err = r.Close()
+//		if err != nil {
+//			log.Println("[ERROR] ", err)
+//		}
+//	}()
+//
+//	file, err := r.File[0].Open()
+//	if err != nil {
+//		log.Fatal("[ERROR] ", err)
+//	}
+//	defer func() {
+//		err = file.Close()
+//		if err != nil {
+//			log.Println("[ERROR] ", err)
+//		}
+//	}()
+//
+//	accounts := models.Accounts{}
+//
+//	err = json.NewDecoder(file).Decode(&accounts)
+//	if err != nil {
+//		log.Fatal("[ERROR] ", err)
+//	}
+//
+//	return accounts
+//}

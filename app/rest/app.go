@@ -17,7 +17,7 @@ import (
 const (
 	dbName                 = "hlc"
 	accountsCollectionName = "accounts"
-	batchSize              = 5000
+	//batchSize              = 5000
 )
 
 type App struct {
@@ -59,38 +59,38 @@ func (a *App) LoadData(accounts []models.Account) {
 	defer session.Close()
 	collection := session.DB(dbName).C(accountsCollectionName)
 
-	data := make([]interface{}, 0)
-	for _, account := range accounts {
-		account.MongoID = bson.NewObjectId()
-		data = append(data, account)
-	}
-
-	log.Println("[DEBUG] len(data)=", len(data))
-
-	var batches [][]interface{}
-	for batchSize < len(data) {
-		data, batches = data[batchSize:], append(batches, data[0:batchSize:batchSize])
-	}
-	batches = append(batches, data)
-
-	for _, batch := range batches {
-		bulk := collection.Bulk()
-		bulk.Insert(batch...)
-		_, err := bulk.Run()
-		if err != nil {
-			log.Println("[ERROR] ", err)
-		}
-	}
+	//data := make([]interface{}, 0)
+	//for _, account := range accounts {
+	//	account.MongoID = bson.NewObjectId()
+	//	data = append(data, account)
+	//}
+	//
+	//log.Println("[DEBUG] len(data)=", len(data))
+	//
+	//var batches [][]interface{}
+	//for batchSize < len(data) {
+	//	data, batches = data[batchSize:], append(batches, data[0:batchSize:batchSize])
+	//}
+	//batches = append(batches, data)
+	//
+	//for _, batch := range batches {
+	//	bulk := collection.Bulk()
+	//	bulk.Insert(batch...)
+	//	_, err := bulk.Run()
+	//	if err != nil {
+	//		log.Println("[ERROR] ", err)
+	//	}
+	//}
 
 	//err := collection.Insert(data...)
 
-	//for i, account := range accounts {
-	//	account.MongoID = bson.NewObjectId()
-	//	err := collection.Insert(&account)
-	//	if err != nil {
-	//		log.Println("[ERROR] index=", i, err)
-	//	}
-	//}
+	for i, account := range accounts {
+		//account.MongoID = bson.NewObjectId()
+		err := collection.Insert(&account)
+		if err != nil {
+			log.Println("[ERROR] index=", i, err)
+		}
+	}
 	log.Println("[INFO] all accounts added")
 }
 
@@ -346,9 +346,7 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 
 	queryMap := make(map[string]interface{})
 
-	var limit int
-
-	var order string
+	var limit, order int
 
 	keys := make([]string, 0)
 
@@ -407,13 +405,19 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case "order":
-			order = v[0]
-			if order == "" {
+			var err error
+			order, err = strconv.Atoi(v[0])
+			if err != nil {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
 
-			if order != "-1" && order != "1" {
+			if order == 0 {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			if order != -1 && order != 1 {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
@@ -440,25 +444,46 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 		defer session.Close()
 		collection := session.DB(dbName).C(accountsCollectionName)
 
-		var distinct []string
-		for _, key := range keys {
-			if key != "sex" && key != "status" {
-				err := collection.Find(queryMap).Distinct(key, &distinct)
-				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					log.Println("[ERROR] ", err)
-					return
-				}
+		groups := models.Groups{}
+		group := models.Group{}    //todo check
+		for _, key := range keys { //todo goroutines??
 
-				for _, s := range distinct {
-					queryMap[key] = s
-					//err = collection.Find(queryMap).Limit(limit)
-				}
+			pipeline := []bson.M{
+				{"$match": queryMap},
+				{"$project": key},
+				{"$group": bson.M{key: "$" + key}, "count": bson.M{"$sum": 1}},
+				{"$sort": bson.M{"$count": order}},
+				{"$limit": limit},
 			}
 
+			err := collection.Pipe(pipeline).One(&group)
+			if err != nil {
+				log.Println("[ERROR] ", err)
+				continue
+			}
+
+			groups.Groups = append(groups.Groups, group)
 		}
 
-		_ = limit
+		//var distinct []string
+		//for _, key := range keys {
+		//	if key != "sex" && key != "status" {
+		//		err := collection.Find(queryMap).Distinct(key, &distinct)
+		//		if err != nil {
+		//			w.WriteHeader(http.StatusInternalServerError)
+		//			log.Println("[ERROR] ", err)
+		//			return
+		//		}
+		//
+		//		for _, s := range distinct {
+		//			queryMap[key] = s
+		//			//err = collection.Find(queryMap).Limit(limit)
+		//		}
+		//	}
+		//
+		//}
+		//
+		//_ = limit
 	}
 }
 
