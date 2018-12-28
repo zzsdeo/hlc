@@ -414,24 +414,23 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 
 	groups := models.Groups{}
 	groups.Groups = make([]models.Group, 0)
-	group := models.Group{}    //todo check
-	for _, key := range keys { //todo goroutines??
+	tempGroups := make([]models.Group, 0) //todo check
+	for _, key := range keys {            //todo goroutines??
 		pipeline := []bson.M{
 			{"$match": queryMap},
-			//{"$project": bson.M{"_id": 0,  key: "$"+key}},
 			{"$group": bson.M{"_id": "$" + key, "count": bson.M{"$sum": 1}}},
 			{"$project": bson.M{"_id": 0, key: "$_id", "count": 1}},
-			//{"$sort": bson.M{"count": order}},
+			{"$sort": bson.M{"count": order}},
 			{"$limit": limit},
 		}
 
-		err := collection.Pipe(pipeline).One(&group)
+		err := collection.Pipe(pipeline).All(&tempGroups)
 		if err != nil {
 			log.Println("[ERROR] ", err)
 			continue
 		}
 
-		groups.Groups = append(groups.Groups, group)
+		groups.Groups = append(groups.Groups, tempGroups...)
 	}
 
 	err := json.NewEncoder(w).Encode(groups)
