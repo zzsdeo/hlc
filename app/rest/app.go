@@ -418,9 +418,9 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 	for _, key := range keys { //todo goroutines??
 		pipeline := []bson.M{
 			{"$match": queryMap},
-			{"$group": bson.M{"_id": bson.M{key: "$" + key, "count": bson.M{"$sum": 1}}}},
-			{"$project": bson.M{"_id": 0, key: "$" + key, "count": 1}},
-			//{"$sort": bson.M{"$count": order}},
+			{"$project": bson.M{"_id": 0, key: 1}},
+			{"$group": bson.M{"_id": "$" + key, "count": bson.M{"$sum": 1}}},
+			//{"$sort": bson.M{"count": order}},
 			{"$limit": limit},
 		}
 
@@ -457,7 +457,7 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 	//
 	//}
 	//
-	_ = limit
+	//_ = limit
 }
 
 func exists(v string) map[string]bool {
