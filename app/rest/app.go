@@ -418,8 +418,9 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 	for _, key := range keys { //todo goroutines??
 		pipeline := []bson.M{
 			{"$match": queryMap},
-			{"$project": bson.M{"_id": 0, key: 1}},
+			//{"$project": bson.M{"_id": 0,  key: "$"+key}},
 			{"$group": bson.M{"_id": "$" + key, "count": bson.M{"$sum": 1}}},
+			{"$project": bson.M{"_id": 0, key: "$_id", "count": 1}},
 			//{"$sort": bson.M{"count": order}},
 			{"$limit": limit},
 		}

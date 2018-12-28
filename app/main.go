@@ -18,8 +18,8 @@ const (
 	listenAddrEnvName = "SERVER_ADDR"
 	defaultListenAddr = ":80"
 
-	optionsFilePath = "./tmp/data/options.txt" //todo for docker without dot
-	dataFilePath    = "./tmp/data/data.zip"    //todo for docker without dot
+	optionsFilePath = "/home/zzsdeo/tmp/data/options.txt" //todo for docker without dot
+	dataFilePath    = "/home/zzsdeo/tmp/data/data.zip"    //todo for docker without dot
 )
 
 type opts struct {
@@ -51,7 +51,7 @@ func main() {
 	//	}
 	//	app.LoadData(data.Accounts)
 	//}
-	//
+
 	//app.CheckDB()
 
 	app.Run(opts.listenAddr)
