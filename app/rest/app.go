@@ -101,14 +101,14 @@ func (a *App) ping(w http.ResponseWriter, r *http.Request) {
 func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	queryMap := make(map[string]interface{})
+	queryMap := make(map[string]interface{}) //todo bson
 
 	var limit int
 
 	for k, v := range r.URL.Query() {
 		switch k {
 		case "sex_eq":
-			queryMap["sex"] = v[0]
+			queryMap["sex"] = v[0] //todo bson
 			continue
 		case "email_domain":
 			regex := make(map[string]string)
@@ -414,50 +414,32 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 
 	groups := models.Groups{}
 	groups.Groups = make([]models.Group, 0)
-	tempGroups := make([]models.Group, 0) //todo check
-	for _, key := range keys {            //todo goroutines??
-		pipeline := []bson.M{
-			{"$match": queryMap},
-			{"$group": bson.M{"_id": "$" + key, "count": bson.M{"$sum": 1}}},
-			{"$project": bson.M{"_id": 0, key: "$_id", "count": 1}},
-			{"$sort": bson.M{"count": order}},
-			{"$limit": limit},
-		}
 
-		err := collection.Pipe(pipeline).All(&tempGroups)
-		if err != nil {
-			log.Println("[ERROR] ", err)
-			continue
-		}
-
-		groups.Groups = append(groups.Groups, tempGroups...)
+	groupPipe := bson.M{}
+	projectPipe := bson.M{"_id": 0, "count": 1}
+	for _, key := range keys {
+		groupPipe[key] = "$" + key
+		projectPipe[key] = "$_id." + key
 	}
 
-	err := json.NewEncoder(w).Encode(groups)
+	pipeline := []bson.M{
+		{"$match": queryMap},
+		{"$group": bson.M{"_id": groupPipe, "count": bson.M{"$sum": 1}}},
+		{"$project": projectPipe},
+		{"$sort": bson.M{"count": order}},
+		{"$limit": limit},
+	}
+
+	err := collection.Pipe(pipeline).All(&groups.Groups)
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	err = json.NewEncoder(w).Encode(groups)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Println("[ERROR] ", err)
 	}
-
-	//var distinct []string
-	//for _, key := range keys {
-	//	if key != "sex" && key != "status" {
-	//		err := collection.Find(queryMap).Distinct(key, &distinct)
-	//		if err != nil {
-	//			w.WriteHeader(http.StatusInternalServerError)
-	//			log.Println("[ERROR] ", err)
-	//			return
-	//		}
-	//
-	//		for _, s := range distinct {
-	//			queryMap[key] = s
-	//			//err = collection.Find(queryMap).Limit(limit)
-	//		}
-	//	}
-	//
-	//}
-	//
-	//_ = limit
 }
 
 func exists(v string) map[string]bool {
