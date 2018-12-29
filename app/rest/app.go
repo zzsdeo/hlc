@@ -417,16 +417,18 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 
 	groupPipe := bson.M{}
 	projectPipe := bson.M{"_id": 0, "count": 1}
+	sortPipe := bson.M{"count": order}
 	for _, key := range keys {
 		groupPipe[key] = "$" + key
 		projectPipe[key] = "$_id." + key
+		sortPipe[key] = order
 	}
 
 	pipeline := []bson.M{
 		{"$match": queryMap},
 		{"$group": bson.M{"_id": groupPipe, "count": bson.M{"$sum": 1}}},
 		{"$project": projectPipe},
-		{"$sort": bson.M{"count": order}},
+		{"$sort": sortPipe},
 		{"$limit": limit},
 	}
 
