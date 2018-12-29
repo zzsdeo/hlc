@@ -469,10 +469,19 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 				for _, key := range keys {
 					switch key {
 					case "sex":
+						if groups.Groups[i].Sex == groups.Groups[j].Sex {
+							continue
+						}
 						return groups.Groups[i].Sex < groups.Groups[j].Sex
 					case "status":
+						if groups.Groups[i].Status == groups.Groups[j].Status {
+							continue
+						}
 						return groups.Groups[i].Status < groups.Groups[j].Status
 					case "interests":
+						if groups.Groups[i].Interests == groups.Groups[j].Sex { //todo
+							continue
+						}
 						return groups.Groups[i].Interests < groups.Groups[j].Interests
 					case "country":
 						return groups.Groups[i].Country < groups.Groups[j].Country
@@ -498,7 +507,7 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 
 		}
 
-		return true
+		return false
 	})
 
 	err = json.NewEncoder(w).Encode(groups)
