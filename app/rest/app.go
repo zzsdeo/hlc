@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -394,6 +395,7 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
+			//validate keys
 			for _, key := range keys {
 				if _, ok := models.Keys[key]; !ok {
 					w.WriteHeader(http.StatusBadRequest)
@@ -415,20 +417,35 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 	groups := models.Groups{}
 	groups.Groups = make([]models.Group, 0)
 
+	//groupPipe := bson.M{}
+	//projectPipe := bson.M{"_id": 0, "count": 1}
+	//sortPipe := bson.M{"count": order}
+	//for _, key := range keys {
+	//	groupPipe[key] = "$" + key
+	//	projectPipe[key] = "$_id." + key
+	//	sortPipe[key] = order
+	//}
+	//
+	//pipeline := []bson.M{
+	//	{"$match": queryMap},
+	//	{"$group": bson.M{"_id": groupPipe, "count": bson.M{"$sum": 1}}},
+	//	{"$project": projectPipe},
+	//	{"$sort": sortPipe},
+	//	{"$limit": limit},
+	//}
+
 	groupPipe := bson.M{}
 	projectPipe := bson.M{"_id": 0, "count": 1}
-	sortPipe := bson.M{"count": order}
 	for _, key := range keys {
 		groupPipe[key] = "$" + key
 		projectPipe[key] = "$_id." + key
-		sortPipe[key] = order
 	}
 
 	pipeline := []bson.M{
 		{"$match": queryMap},
 		{"$group": bson.M{"_id": groupPipe, "count": bson.M{"$sum": 1}}},
 		{"$project": projectPipe},
-		{"$sort": sortPipe},
+		{"$sort": bson.M{"count": order}},
 		{"$limit": limit},
 	}
 
@@ -436,6 +453,53 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println("[ERROR] ", err)
 	}
+
+	//for i, group := range groups.Groups {
+	//	if i + 1 != len(groups.Groups) && group.Count == groups.Groups[i+1].Count {
+	//		if order == 1 && group.Sex > groups.Groups[i+1].Sex {
+	//			groups.Groups[i+1] =
+	//		}
+	//	}
+	//}
+
+	sort.Slice(groups.Groups, func(i, j int) bool {
+
+		if groups.Groups[i].Count == groups.Groups[j].Count {
+			if order == 1 {
+				for _, key := range keys {
+					switch key {
+					case "sex":
+						return groups.Groups[i].Sex < groups.Groups[j].Sex
+					case "status":
+						return groups.Groups[i].Status < groups.Groups[j].Status
+					case "interests":
+						return groups.Groups[i].Interests < groups.Groups[j].Interests
+					case "country":
+						return groups.Groups[i].Country < groups.Groups[j].Country
+					case "city":
+						return groups.Groups[i].City < groups.Groups[j].City
+					}
+				}
+			}
+			for _, key := range keys {
+				switch key {
+				case "sex":
+					return groups.Groups[i].Sex > groups.Groups[j].Sex
+				case "status":
+					return groups.Groups[i].Status > groups.Groups[j].Status
+				case "interests":
+					return groups.Groups[i].Interests > groups.Groups[j].Interests
+				case "country":
+					return groups.Groups[i].Country > groups.Groups[j].Country
+				case "city":
+					return groups.Groups[i].City > groups.Groups[j].City
+				}
+			}
+
+		}
+
+		return true
+	})
 
 	err = json.NewEncoder(w).Encode(groups)
 	if err != nil {
