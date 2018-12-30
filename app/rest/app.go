@@ -9,7 +9,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -79,6 +78,88 @@ func (a *App) CheckDB() {
 	log.Println("[INFO] recs added=", recs)
 }
 
+func (a *App) CreateIndex(background bool) {
+	log.Println("[INFO] indexing started")
+
+	session := a.mongoSession.Copy()
+	defer session.Close()
+	collection := session.DB(dbName).C(accountsCollectionName)
+
+	err := collection.EnsureIndex(mgo.Index{
+		Key:        []string{"id"},
+		Background: background,
+		Sparse:     true,
+	})
+
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	err = collection.EnsureIndex(mgo.Index{
+		Key:        []string{"country"},
+		Background: background,
+		Sparse:     true,
+	})
+
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	err = collection.EnsureIndex(mgo.Index{
+		Key:        []string{"city"},
+		Background: background,
+		Sparse:     true,
+	})
+
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	err = collection.EnsureIndex(mgo.Index{
+		Key:        []string{"birth"},
+		Background: background,
+		Sparse:     true,
+	})
+
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	err = collection.EnsureIndex(mgo.Index{
+		Key:        []string{"interests"},
+		Background: background,
+		Sparse:     true,
+	})
+
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	err = collection.EnsureIndex(mgo.Index{
+		Key:        []string{"likes"},
+		Background: background,
+		Sparse:     true,
+	})
+
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	err = collection.EnsureIndex(mgo.Index{
+		Key:        []string{"joined"},
+		Background: background,
+		Sparse:     true,
+	})
+
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	if !background {
+		log.Println("[INFO] indexing finished")
+	}
+}
+
 func (a *App) Run(listenAddr string) {
 	log.Println("[INFO] start server on", listenAddr)
 	log.Fatal("[ERROR] ", http.ListenAndServe(listenAddr, a.router))
@@ -101,107 +182,84 @@ func (a *App) ping(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
-	queryMap := make(map[string]interface{}) //todo bson
-
+	query := bson.M{}
 	var limit int
-
 	for k, v := range r.URL.Query() {
 		switch k {
 		case "sex_eq":
-			queryMap["sex"] = v[0] //todo bson
+			query["sex"] = v[0]
 			continue
 		case "email_domain":
-			regex := make(map[string]string)
-			regex["$regex"] = "(@" + v[0] + ")"
-			queryMap["email"] = regex
+			query["email"] = bson.M{"$regex": "(@" + v[0] + ")"}
 			continue
 		case "email_lt":
-			lt := make(map[string]string)
-			lt["$lt"] = v[0]
-			queryMap["email"] = lt
+			query["email"] = bson.M{"$lt": v[0]}
 			continue
 		case "email_gt":
-			gt := make(map[string]string)
-			gt["$gt"] = v[0]
-			queryMap["email"] = gt
+			query["email"] = bson.M{"$gt": v[0]}
 			continue
 		case "status_eq":
-			queryMap["status"] = v[0]
+			query["status"] = v[0]
 			continue
 		case "status_neq":
-			ne := make(map[string]string)
-			ne["$ne"] = v[0]
-			queryMap["status"] = ne
+			query["status"] = bson.M{"$ne": v[0]}
 			continue
 		case "fname_eq":
-			queryMap["fname"] = v[0]
+			query["fname"] = v[0]
 			continue
 		case "fname_any":
-			in := make(map[string][]string)
-			in["$in"] = strings.Split(v[0], ",")
-			queryMap["fname"] = in
+			query["fname"] = bson.M{"$in": strings.Split(v[0], ",")}
 			continue
 		case "fname_null":
-			queryMap["fname"] = exists(v[0])
+			query["fname"] = exists(v[0])
 			continue
 		case "sname_eq":
-			queryMap["sname"] = v[0]
+			query["sname"] = v[0]
 			continue
 		case "sname_starts":
-			regex := make(map[string]string)
-			regex["$regex"] = "^" + v[0]
-			queryMap["sname"] = regex
+			query["sname"] = bson.M{"$regex": "^" + v[0]}
 			continue
 		case "sname_null":
-			queryMap["sname"] = exists(v[0])
+			query["sname"] = exists(v[0])
 			continue
 		case "phone_code":
-			regex := make(map[string]string)
-			regex["$regex"] = "(\\(" + v[0] + "\\))"
-			queryMap["phone"] = regex
+			query["phone"] = bson.M{"$regex": "(\\(" + v[0] + "\\))"}
 			continue
 		case "phone_null":
-			queryMap["phone"] = exists(v[0])
+			query["phone"] = exists(v[0])
 			continue
 		case "country_eq":
-			queryMap["country"] = v[0]
+			query["country"] = v[0]
 			continue
 		case "country_null":
-			queryMap["country"] = exists(v[0])
+			query["country"] = exists(v[0])
 			continue
 		case "city_eq":
-			queryMap["city"] = v[0]
+			query["city"] = v[0]
 			continue
 		case "city_any":
-			in := make(map[string][]string)
-			in["$in"] = strings.Split(v[0], ",")
-			queryMap["city"] = in
+			query["city"] = bson.M{"$in": strings.Split(v[0], ",")}
 			continue
 		case "city_null":
-			queryMap["city"] = exists(v[0])
+			query["city"] = exists(v[0])
 			continue
 		case "birth_lt":
-			lt := make(map[string]int)
-			var err error
-			lt["$lt"], err = strconv.Atoi(v[0])
+			birth, err := strconv.Atoi(v[0])
 			if err != nil {
 				log.Println("[ERROR] ", err)
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			queryMap["birth"] = lt
+			query["birth"] = bson.M{"$lt": birth}
 			continue
 		case "birth_gt":
-			gt := make(map[string]int)
-			var err error
-			gt["$gt"], err = strconv.Atoi(v[0])
+			birth, err := strconv.Atoi(v[0])
 			if err != nil {
 				log.Println("[ERROR] ", err)
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			queryMap["birth"] = gt
+			query["birth"] = bson.M{"$gt": birth}
 			continue
 		case "birth_year":
 			year, err := strconv.Atoi(v[0])
@@ -210,19 +268,13 @@ func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			queryMap["birth"] = yearInterval(year)
+			query["birth"] = yearInterval(year)
 			continue
 		case "interests_contains":
-			all := make(map[string][]string)
-			all["$all"] = strings.Split(v[0], ",")
-			queryMap["interests"] = all
+			query["interests"] = bson.M{"$all": strings.Split(v[0], ",")}
 			continue
 		case "interests_any":
-			elemMatch := make(map[string]map[string][]string)
-			in := make(map[string][]string)
-			in["$in"] = strings.Split(v[0], ",")
-			elemMatch["$elemMatch"] = in
-			queryMap["interests"] = elemMatch
+			query["interests"] = bson.M{"$elemMatch": bson.M{"$in": strings.Split(v[0], ",")}}
 			continue
 		case "likes_contains":
 			likes := strings.Split(v[0], ",")
@@ -237,30 +289,13 @@ func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 				likeIds = append(likeIds, l)
 			}
 			//log.Println("[DEBUG] ", likeIds)
-			all := make(map[string][]int)
-			all["$all"] = likeIds
-			like := make(map[string]map[string][]int)
-			like["id"] = all
-			elemMatch := make(map[string]map[string]map[string][]int)
-			elemMatch["$elemMatch"] = like
-			queryMap["likes"] = elemMatch
+			query["likes"] = bson.M{"$elemMatch": bson.M{"id": bson.M{"$all": likeIds}}}
 			continue
 		case "premium_now":
-			//mongo find {"$and":["premium.start":{"$lt": 123}, "premium.finish":{"$gt": 123}]}
-			lt := make(map[string]int)
-			lt["$lt"] = a.now
-			gt := make(map[string]int)
-			gt["$gt"] = a.now
-			start := make(map[string]map[string]int)
-			start["premium.start"] = lt
-			finish := make(map[string]map[string]int)
-			finish["premium.finish"] = gt
-			interval := make([]map[string]map[string]int, 0)
-			interval = append(interval, start, finish)
-			queryMap["$and"] = interval
+			query["$and"] = []bson.M{{"premium.start": bson.M{"$lt": a.now}}, {"premium.finish": bson.M{"$gt": a.now}}}
 			continue
 		case "premium_null":
-			queryMap["premium"] = exists(v[0])
+			query["premium"] = exists(v[0])
 			continue
 		case "limit":
 			var err error
@@ -270,14 +305,16 @@ func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
+			continue
 		case "query_id":
+			continue
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 	}
 
-	//log.Println("[DEBUG] queryMap=", queryMap)
+	//log.Println("[DEBUG] query=", query)
 	//log.Println("[DEBUG] limit=", limit)
 
 	session := a.mongoSession.Copy()
@@ -287,7 +324,7 @@ func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 	selector := make(map[string]int)
 	selector["id"] = 1
 	selector["email"] = 1
-	for k, _ := range queryMap {
+	for k, _ := range query {
 		if k != "interests" && k != "likes" {
 			if k == "$and" {
 				selector["premium"] = 1
@@ -302,10 +339,10 @@ func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 	filterResponse := models.Accounts{}
 	filterResponse.Accounts = make([]models.Account, 0)
 
-	err := collection.Find(queryMap).Limit(limit).Sort("-id").Select(selector).All(&filterResponse.Accounts)
+	err := collection.Find(query).Limit(limit).Sort("-id").Select(selector).All(&filterResponse.Accounts)
 
 	if err != nil {
-		log.Println("[ERROR] ", err, queryMap)
+		log.Println("[ERROR] ", err, query)
 	}
 
 	err = json.NewEncoder(w).Encode(filterResponse)
@@ -318,17 +355,14 @@ func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) group(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
-	queryMap := make(map[string]interface{})
-
+	query := make(map[string]interface{})
 	var limit, order int
-
 	keys := make([]string, 0)
-
 	for k, v := range r.URL.Query() {
 		switch k {
 		case "sex":
-			queryMap["sex"] = v[0]
+			query["sex"] = v[0]
+			continue
 		case "birth":
 			year, err := strconv.Atoi(v[0])
 			if err != nil {
@@ -336,11 +370,14 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			queryMap["birth"] = yearInterval(year)
+			query["birth"] = yearInterval(year)
+			continue
 		case "country":
-			queryMap["country"] = v[0]
+			query["country"] = v[0]
+			continue
 		case "city":
-			queryMap["city"] = v[0]
+			query["city"] = v[0]
+			continue
 		case "joined":
 			year, err := strconv.Atoi(v[0])
 			if err != nil {
@@ -348,23 +385,23 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			queryMap["joined"] = yearInterval(year)
+			query["joined"] = yearInterval(year)
+			continue
 		case "status":
-			queryMap["status"] = v[0]
+			query["status"] = v[0]
+			continue
 		case "interests":
-			regex := make(map[string]string)
-			regex["$regex"] = v[0] //todo try without regex
-			elemMatch := make(map[string]map[string]string)
-			elemMatch["$elemMatch"] = regex
-			queryMap["interests"] = elemMatch
+			query["interests"] = bson.M{"$elemMatch": bson.M{"$eq": v[0]}}
+			continue
 		case "likes":
-			regex := make(map[string]string)
-			regex["$regex"] = v[0] //todo try without regex
-			elemMatch := make(map[string]map[string]string)
-			elemMatch["$elemMatch"] = regex
-			like := make(map[string]map[string]map[string]string)
-			like["id"] = elemMatch
-			queryMap["likes"] = like
+			likeId, err := strconv.Atoi(v[0])
+			if err != nil {
+				log.Println("[ERROR] ", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			query["likes"] = bson.M{"$elemMatch": bson.M{"id": likeId}}
+			continue
 		case "limit":
 			var err error
 			limit, err = strconv.Atoi(v[0])
@@ -372,6 +409,7 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
+			continue
 		case "order":
 			var err error
 			order, err = strconv.Atoi(v[0])
@@ -389,6 +427,7 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
+			continue
 		case "keys":
 			keys = strings.Split(v[0], ",")
 			if len(keys) == 0 {
@@ -402,11 +441,12 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
+			continue
 		case "query_id":
+			continue
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 			return
-
 		}
 	}
 
@@ -417,98 +457,43 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 	groups := models.Groups{}
 	groups.Groups = make([]models.Group, 0)
 
-	//groupPipe := bson.M{}
-	//projectPipe := bson.M{"_id": 0, "count": 1}
-	//sortPipe := bson.M{"count": order}
-	//for _, key := range keys {
-	//	groupPipe[key] = "$" + key
-	//	projectPipe[key] = "$_id." + key
-	//	sortPipe[key] = order
-	//}
-	//
-	//pipeline := []bson.M{
-	//	{"$match": queryMap},
-	//	{"$group": bson.M{"_id": groupPipe, "count": bson.M{"$sum": 1}}},
-	//	{"$project": projectPipe},
-	//	{"$sort": sortPipe},
-	//	{"$limit": limit},
-	//}
-
 	groupPipe := bson.M{}
 	projectPipe := bson.M{"_id": 0, "count": 1}
+	sortPipe := bson.M{"count": order}
+	unwind := false
 	for _, key := range keys {
 		groupPipe[key] = "$" + key
 		projectPipe[key] = "$_id." + key
+		sortPipe[key] = order
+		if key == "interests" {
+			unwind = true
+		}
 	}
 
-	pipeline := []bson.M{
-		{"$match": queryMap},
-		{"$group": bson.M{"_id": groupPipe, "count": bson.M{"$sum": 1}}},
-		{"$project": projectPipe},
-		{"$sort": bson.M{"count": order}},
-		{"$limit": limit},
+	var pipeline []bson.M
+	if unwind {
+		pipeline = []bson.M{
+			{"$match": query},
+			{"$unwind": "$interests"},
+			{"$group": bson.M{"_id": groupPipe, "count": bson.M{"$sum": 1}}},
+			{"$project": projectPipe},
+			{"$sort": sortPipe},
+			{"$limit": limit},
+		}
+	} else {
+		pipeline = []bson.M{
+			{"$match": query},
+			{"$group": bson.M{"_id": groupPipe, "count": bson.M{"$sum": 1}}},
+			{"$project": projectPipe},
+			{"$sort": sortPipe},
+			{"$limit": limit},
+		}
 	}
 
 	err := collection.Pipe(pipeline).All(&groups.Groups)
 	if err != nil {
 		log.Println("[ERROR] ", err)
 	}
-
-	//for i, group := range groups.Groups {
-	//	if i + 1 != len(groups.Groups) && group.Count == groups.Groups[i+1].Count {
-	//		if order == 1 && group.Sex > groups.Groups[i+1].Sex {
-	//			groups.Groups[i+1] =
-	//		}
-	//	}
-	//}
-
-	sort.Slice(groups.Groups, func(i, j int) bool {
-
-		if groups.Groups[i].Count == groups.Groups[j].Count {
-			if order == 1 {
-				for _, key := range keys {
-					switch key {
-					case "sex":
-						if groups.Groups[i].Sex == groups.Groups[j].Sex {
-							continue
-						}
-						return groups.Groups[i].Sex < groups.Groups[j].Sex
-					case "status":
-						if groups.Groups[i].Status == groups.Groups[j].Status {
-							continue
-						}
-						return groups.Groups[i].Status < groups.Groups[j].Status
-					case "interests":
-						if groups.Groups[i].Interests == groups.Groups[j].Sex { //todo
-							continue
-						}
-						return groups.Groups[i].Interests < groups.Groups[j].Interests
-					case "country":
-						return groups.Groups[i].Country < groups.Groups[j].Country
-					case "city":
-						return groups.Groups[i].City < groups.Groups[j].City
-					}
-				}
-			}
-			for _, key := range keys {
-				switch key {
-				case "sex":
-					return groups.Groups[i].Sex > groups.Groups[j].Sex
-				case "status":
-					return groups.Groups[i].Status > groups.Groups[j].Status
-				case "interests":
-					return groups.Groups[i].Interests > groups.Groups[j].Interests
-				case "country":
-					return groups.Groups[i].Country > groups.Groups[j].Country
-				case "city":
-					return groups.Groups[i].City > groups.Groups[j].City
-				}
-			}
-
-		}
-
-		return false
-	})
 
 	err = json.NewEncoder(w).Encode(groups)
 	if err != nil {
@@ -517,22 +502,23 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func exists(v string) map[string]bool {
-	exists := make(map[string]bool)
+func (a *App) recommend(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+}
+
+func exists(v string) bson.M {
 	switch v {
 	case "0":
-		exists["$exists"] = true
-		return exists
+		return bson.M{"$exists": true}
 	case "1":
-		exists["$exists"] = false
-		return exists
+		return bson.M{"$exists": false}
 	}
 	return nil
 }
 
-func yearInterval(year int) map[string]int64 {
-	interval := make(map[string]int64)
-	interval["$gte"] = time.Date(year, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
-	interval["$lt"] = time.Date(year+1, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
-	return interval
+func yearInterval(year int) bson.M {
+	return bson.M{
+		"$gte": time.Date(year, time.January, 1, 0, 0, 0, 0, time.UTC).Unix(),
+		"$lt":  time.Date(year+1, time.January, 1, 0, 0, 0, 0, time.UTC).Unix(),
+	}
 }
