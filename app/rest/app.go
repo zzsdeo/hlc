@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -170,6 +171,7 @@ func (a *App) initializeRoutes() {
 
 	a.router.HandleFunc("/accounts/filter/", a.filter).Methods(http.MethodGet)
 	a.router.HandleFunc("/accounts/group/", a.group).Methods(http.MethodGet)
+	a.router.HandleFunc("/accounts/{id}/recommend/", a.recommend).Methods(http.MethodGet)
 }
 
 func (a *App) ping(w http.ResponseWriter, r *http.Request) {
@@ -185,6 +187,10 @@ func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 	query := bson.M{}
 	var limit int
 	for k, v := range r.URL.Query() {
+		if v[0] == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		switch k {
 		case "sex_eq":
 			query["sex"] = v[0]
@@ -305,6 +311,10 @@ func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
+			if limit < 0 {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
 			continue
 		case "query_id":
 			continue
@@ -355,10 +365,14 @@ func (a *App) filter(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) group(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	query := make(map[string]interface{})
+	query := bson.M{}
 	var limit, order int
 	keys := make([]string, 0)
 	for k, v := range r.URL.Query() {
+		if v[0] == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		switch k {
 		case "sex":
 			query["sex"] = v[0]
@@ -406,6 +420,11 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 			var err error
 			limit, err = strconv.Atoi(v[0])
 			if err != nil {
+				log.Println("[ERROR] ", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if limit < 0 {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
@@ -504,6 +523,105 @@ func (a *App) group(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) recommend(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	session := a.mongoSession.Copy()
+	defer session.Close()
+	collection := session.DB(dbName).C(accountsCollectionName)
+
+	account := models.Account{}
+	err = collection.Find(bson.M{"id": id}).Select(bson.M{
+		"sex":       1,
+		"birth":     1,
+		"interests": 1}).One(&account)
+	if err != nil {
+		log.Println("[ERROR] ", err)
+		if err == mgo.ErrNotFound {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+	}
+
+	query := bson.M{"sex": "f"}
+	if account.Sex == "f" {
+		query["sex"] = "m"
+	}
+
+	query["interests"] = bson.M{"$elemMatch": bson.M{"$in": account.Interests}}
+
+	var limit int
+	for k, v := range r.URL.Query() {
+		if v[0] == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		switch k {
+		case "country":
+			query["country"] = v[0]
+			continue
+		case "city":
+			query["city"] = v[0]
+			continue
+		case "limit":
+			var err error
+			limit, err = strconv.Atoi(v[0])
+			if err != nil {
+				log.Println("[ERROR] ", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if limit < 0 {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			continue
+		case "query_id":
+			continue
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+	}
+
+	accounts := models.Accounts{}
+	accounts.Accounts = make([]models.Account, 0)
+
+	err = collection.Find(query).Select(bson.M{
+		"id":        1,
+		"email":     1,
+		"status":    1,
+		"fname":     1,
+		"sname":     1,
+		"birth":     1,
+		"premium":   1,
+		"interests": 1}).All(&accounts.Accounts)
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	account.PrepareInterestsMap()
+	sort.Slice(accounts.Accounts, func(i, j int) bool {
+		return account.CheckCompatibility(accounts.Accounts[i], a.now) > account.CheckCompatibility(accounts.Accounts[j], a.now)
+	})
+
+	if len(accounts.Accounts) > limit {
+		accounts.Accounts = accounts.Accounts[:limit]
+	}
+
+	for i, _ := range accounts.Accounts {
+		accounts.Accounts[i].Interests = []string{}
+	}
+
+	err = json.NewEncoder(w).Encode(accounts)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("[ERROR] ", err)
+	}
 }
 
 func exists(v string) bson.M {
