@@ -18,14 +18,14 @@ const (
 	listenAddrEnvName = "SERVER_ADDR"
 	defaultListenAddr = ":80"
 
-	//optionsFilePath = "/tmp/data/options.txt" //todo docker
-	//dataFilePath    = "/tmp/data/data.zip"
+	optionsFilePath = "/tmp/data/options.txt" //todo docker
+	dataFilePath    = "/tmp/data/data.zip"
 
 	//optionsFilePath = "/home/zzsdeo/tmp/data/options.txt" //todo hp
 	//dataFilePath    = "/home/zzsdeo/tmp/data/data.zip"
 
-	optionsFilePath = "./tmp/data/options.txt" //todo home
-	dataFilePath    = "./tmp/data/data.zip"
+	//optionsFilePath = "./tmp/data/options.txt" //todo home
+	//dataFilePath    = "./tmp/data/data.zip"
 )
 
 type opts struct {
@@ -43,24 +43,26 @@ func main() {
 
 	app.SetNow(opts.now)
 
-	//app.DropCollection()
+	app.DropCollection()
 
-	//r, err := readZip()
-	//if err != nil {
-	//	log.Fatal("[ERROR] ", err)
-	//}
-	//
-	//for _, file := range r.File {
-	//	data, err := parseData(file)
-	//	if err != nil {
-	//		log.Fatal("[ERROR] ", err)
-	//	}
-	//	app.LoadData(data.Accounts)
-	//}
+	r, err := readZip()
+	if err != nil {
+		log.Fatal("[ERROR] ", err)
+	}
 
-	//app.CheckDB()
+	for _, file := range r.File {
+		data, err := parseData(file)
+		if err != nil {
+			log.Fatal("[ERROR] ", err)
+		}
+		app.LoadData(data.Accounts)
+	}
 
-	//app.CreateIndex(false)
+	app.CheckDB()
+
+	app.DropAllIndexes()
+
+	app.CreateIndexes(false)
 
 	app.Run(opts.listenAddr)
 }

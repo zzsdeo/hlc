@@ -1,5 +1,11 @@
 package models
 
+import (
+	"errors"
+	"math"
+	"sort"
+)
+
 type Account struct {
 	ID           int      `json:"id,omitempty" bson:"id,omitempty"`               //unique
 	Email        string   `json:"email,omitempty" bson:"email,omitempty"`         //up to 100 symbols, unique
@@ -16,6 +22,7 @@ type Account struct {
 	interestsMap map[string]bool
 	Premium      *Premium `json:"premium,omitempty" bson:"premium,omitempty"`
 	Likes        []Like   `json:"likes,omitempty" bson:"likes,omitempty"`
+	likesMap     map[int][]int
 }
 
 type Premium struct {
@@ -30,6 +37,16 @@ type Like struct {
 
 type Accounts struct {
 	Accounts []Account `json:"accounts"`
+}
+
+func (a *Accounts) ExtractAccountByID(id int) (Account, error) {
+	for i, account := range a.Accounts {
+		if account.ID == id {
+			a.Accounts = append(a.Accounts[:i], a.Accounts[i+1:]...)
+			return account, nil
+		}
+	}
+	return Account{}, errors.New("account not found")
 }
 
 func (a *Account) PrepareInterestsMap() {
@@ -114,4 +131,52 @@ func (a *Account) isPremium(now int) bool {
 		return true
 	}
 	return false
+}
+
+func (a *Account) PrepareLikesMap() {
+	a.likesMap = make(map[int][]int)
+	for _, like := range a.Likes {
+		a.likesMap[like.ID] = append(a.likesMap[like.ID], like.TS)
+	}
+}
+
+func (a *Account) CheckSimilarity(account Account) float64 {
+	var similarity float64
+	account.PrepareLikesMap()
+	var avrLikes, avrMyLikes float64
+	for k, likes := range account.likesMap {
+		avrLikes, avrMyLikes = 0, 0
+		if myLikes, ok := a.likesMap[k]; ok {
+			for _, myLike := range myLikes {
+				avrMyLikes += float64(myLike)
+			}
+			avrMyLikes /= float64(len(myLikes))
+
+			for _, like := range likes {
+				avrLikes += float64(like)
+			}
+			avrLikes /= float64(len(likes))
+
+			if avrMyLikes == avrLikes {
+				similarity += 1
+				continue
+			}
+
+			similarity += 1 / math.Abs(avrMyLikes-avrLikes)
+		}
+	}
+	return similarity
+}
+
+func (a *Account) GetNewIds(account Account) []int {
+	var ids []int
+	for _, like := range account.Likes {
+		if _, ok := a.likesMap[like.ID]; !ok {
+			ids = append(ids, like.ID)
+		}
+	}
+	sort.Slice(ids, func(i, j int) bool {
+		return ids[i] > ids[j]
+	})
+	return ids
 }

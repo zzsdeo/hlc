@@ -30,12 +30,15 @@ func (a *App) Initialize(mongoAddr string) {
 	a.router = mux.NewRouter()
 
 	session, err := mgo.Dial(mongoAddr)
+	//session, err := mgo.DialWithInfo(&mgo.DialInfo{
+	//	Addrs:[]string{":27017"},
+	//	ReadTimeout:time.Minute,
+	//})
 	if err != nil {
 		log.Fatal("[ERROR] ", err)
 	}
 	a.mongoSession = session
-
-	//todo make indexes
+	//a.mongoSession.SetPoolLimit(500000)
 
 	a.initializeRoutes()
 }
@@ -79,7 +82,20 @@ func (a *App) CheckDB() {
 	log.Println("[INFO] recs added=", recs)
 }
 
-func (a *App) CreateIndex(background bool) {
+func (a *App) DropAllIndexes() {
+	session := a.mongoSession.Copy()
+	defer session.Close()
+	collection := session.DB(dbName).C(accountsCollectionName)
+
+	err := collection.DropAllIndexes()
+	if err != nil {
+		log.Println("[ERROR] ", err)
+		return
+	}
+	log.Println("[INFO] indexes has been dropped")
+}
+
+func (a *App) CreateIndexes(background bool) {
 	log.Println("[INFO] indexing started")
 
 	session := a.mongoSession.Copy()
@@ -89,7 +105,6 @@ func (a *App) CreateIndex(background bool) {
 	err := collection.EnsureIndex(mgo.Index{
 		Key:        []string{"id"},
 		Background: background,
-		Sparse:     true,
 	})
 
 	if err != nil {
@@ -99,7 +114,6 @@ func (a *App) CreateIndex(background bool) {
 	err = collection.EnsureIndex(mgo.Index{
 		Key:        []string{"country"},
 		Background: background,
-		Sparse:     true,
 	})
 
 	if err != nil {
@@ -109,7 +123,6 @@ func (a *App) CreateIndex(background bool) {
 	err = collection.EnsureIndex(mgo.Index{
 		Key:        []string{"city"},
 		Background: background,
-		Sparse:     true,
 	})
 
 	if err != nil {
@@ -119,7 +132,6 @@ func (a *App) CreateIndex(background bool) {
 	err = collection.EnsureIndex(mgo.Index{
 		Key:        []string{"birth"},
 		Background: background,
-		Sparse:     true,
 	})
 
 	if err != nil {
@@ -129,7 +141,6 @@ func (a *App) CreateIndex(background bool) {
 	err = collection.EnsureIndex(mgo.Index{
 		Key:        []string{"interests"},
 		Background: background,
-		Sparse:     true,
 	})
 
 	if err != nil {
@@ -139,7 +150,6 @@ func (a *App) CreateIndex(background bool) {
 	err = collection.EnsureIndex(mgo.Index{
 		Key:        []string{"likes"},
 		Background: background,
-		Sparse:     true,
 	})
 
 	if err != nil {
@@ -149,7 +159,69 @@ func (a *App) CreateIndex(background bool) {
 	err = collection.EnsureIndex(mgo.Index{
 		Key:        []string{"joined"},
 		Background: background,
-		Sparse:     true,
+	})
+
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	err = collection.EnsureIndex(mgo.Index{
+		Key:        []string{"email"},
+		Background: background,
+	})
+
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	err = collection.EnsureIndex(mgo.Index{
+		Key:        []string{"fname"},
+		Background: background,
+	})
+
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	err = collection.EnsureIndex(mgo.Index{
+		Key:        []string{"sname"},
+		Background: background,
+	})
+
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	err = collection.EnsureIndex(mgo.Index{
+		Key:        []string{"phone"},
+		Background: background,
+	})
+
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	err = collection.EnsureIndex(mgo.Index{
+		Key:        []string{"sex"},
+		Background: background,
+	})
+
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	err = collection.EnsureIndex(mgo.Index{
+		Key:        []string{"status"},
+		Background: background,
+	})
+
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	err = collection.EnsureIndex(mgo.Index{
+		Key:        []string{"premium"},
+		Background: background,
 	})
 
 	if err != nil {
@@ -167,11 +239,12 @@ func (a *App) Run(listenAddr string) {
 }
 
 func (a *App) initializeRoutes() {
-	a.router.HandleFunc("/ping/", a.ping).Methods(http.MethodGet)
+	//a.router.HandleFunc("/ping/", a.ping).Methods(http.MethodGet)
 
 	a.router.HandleFunc("/accounts/filter/", a.filter).Methods(http.MethodGet)
 	a.router.HandleFunc("/accounts/group/", a.group).Methods(http.MethodGet)
 	a.router.HandleFunc("/accounts/{id}/recommend/", a.recommend).Methods(http.MethodGet)
+	a.router.HandleFunc("/accounts/{id}/suggest/", a.suggest).Methods(http.MethodGet)
 }
 
 func (a *App) ping(w http.ResponseWriter, r *http.Request) {
@@ -615,6 +688,153 @@ func (a *App) recommend(w http.ResponseWriter, r *http.Request) {
 
 	for i, _ := range accounts.Accounts {
 		accounts.Accounts[i].Interests = []string{}
+	}
+
+	err = json.NewEncoder(w).Encode(accounts)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("[ERROR] ", err)
+	}
+}
+
+func (a *App) suggest(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	session := a.mongoSession.Copy()
+	defer session.Close()
+	collection := session.DB(dbName).C(accountsCollectionName)
+
+	account := models.Account{}
+	err = collection.Find(bson.M{"id": id}).Select(bson.M{
+		"sex":   1,
+		"likes": 1}).One(&account)
+	if err != nil {
+		log.Println("[ERROR] ", err)
+		if err == mgo.ErrNotFound {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+	}
+
+	query := bson.M{"sex": account.Sex}
+
+	var limit int
+	for k, v := range r.URL.Query() {
+		if v[0] == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		switch k {
+		case "country":
+			query["country"] = v[0]
+			continue
+		case "city":
+			query["city"] = v[0]
+			continue
+		case "limit":
+			var err error
+			limit, err = strconv.Atoi(v[0])
+			if err != nil {
+				log.Println("[ERROR] ", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if limit < 0 {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			continue
+		case "query_id":
+			continue
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+	}
+
+	likeIds := make([]int, 0)
+	for _, like := range account.Likes {
+		likeIds = append(likeIds, like.ID)
+	}
+	query["likes"] = bson.M{"$elemMatch": bson.M{"id": bson.M{"$in": likeIds}}}
+
+	accounts := models.Accounts{}
+	accounts.Accounts = make([]models.Account, 0)
+
+	err = collection.Find(query).Select(bson.M{"likes": 1}).All(&accounts.Accounts)
+	if err != nil {
+		log.Println("[ERROR] ", err)
+	}
+
+	account.PrepareLikesMap()
+	//sort.Slice(accounts.Accounts, func(i, j int) bool {
+	//	return account.CheckSimilarity(accounts.Accounts[i]) > account.CheckSimilarity(accounts.Accounts[j])
+	//})
+	parallelMergeSort(accounts.Accounts, account)
+
+	//ids := make([]int, 0)
+	//for _, a := range accounts.Accounts {
+	//	//log.Println(account.CheckSimilarity(a))todo
+	//	if account.CheckSimilarity(a) == 0 {
+	//		break
+	//	}
+	//	ids = append(ids, account.GetNewIds(a)...)
+	//}
+	//
+	//err = collection.Find(bson.M{"id": bson.M{"$in":ids}}).Select(bson.M{
+	//	"id":1,
+	//	"email":1,
+	//	"status":1,
+	//	"fname":1,
+	//	"sname":1}).All(&accounts.Accounts)
+	//if err != nil {
+	//	log.Println("[ERROR] ", err)
+	//}
+	//
+	//result := models.Accounts{}
+	//result.Accounts = make([]models.Account, 0)
+	//for i:= 0; i < limit; i++ {
+	//	tempAccount, err := accounts.ExtractAccountByID(ids[i])
+	//	if err != nil {
+	//		log.Println("[ERROR] ", err)
+	//		continue
+	//	}
+	//	result.Accounts = append(result.Accounts, tempAccount)
+	//}
+	//
+	//err = json.NewEncoder(w).Encode(result)
+	//if err != nil {
+	//	w.WriteHeader(http.StatusInternalServerError)
+	//	log.Println("[ERROR] ", err)
+	//}
+
+	//if len(accounts.Accounts) > limit {
+	//	accounts.Accounts = accounts.Accounts[:limit]
+	//}
+
+	ids := make([]int, 0)
+	for _, a := range accounts.Accounts {
+		ids = append(ids, account.GetNewIds(a)...)
+		if len(ids) > limit {
+			ids = ids[:limit]
+			break
+		}
+	}
+
+	err = collection.Find(bson.M{"id": bson.M{"$in": ids}}).Select(bson.M{
+		"id":     1,
+		"email":  1,
+		"status": 1,
+		"fname":  1,
+		"sname":  1}).Sort("-id").All(&accounts.Accounts)
+	if err != nil {
+		log.Println("[ERROR] ", err)
 	}
 
 	err = json.NewEncoder(w).Encode(accounts)
