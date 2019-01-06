@@ -7,22 +7,22 @@ import (
 )
 
 type Account struct {
-	ID           int      `json:"id,omitempty" bson:"id,omitempty"`               //unique
-	Email        string   `json:"email,omitempty" bson:"email,omitempty"`         //up to 100 symbols, unique
-	FName        string   `json:"fname,omitempty" bson:"fname,omitempty"`         //up to 50 symbols, optional
-	SName        string   `json:"sname,omitempty" bson:"sname,omitempty"`         //up to 50 symbols, optional
-	Phone        string   `json:"phone,omitempty" bson:"phone,omitempty"`         //up to 16 symbols, unique, optional
-	Sex          string   `json:"sex,omitempty" bson:"sex,omitempty"`             //m|f
-	Birth        int      `json:"birth,omitempty" bson:"birth,omitempty"`         //timestamp from 01.01.1950 to 01.01.2005
-	Country      string   `json:"country,omitempty" bson:"country,omitempty"`     //up to 50 symbols, optional
-	City         string   `json:"city,omitempty" bson:"city,omitempty"`           //up to 50 symbols, optional, every city belongs to defined country
-	Joined       int      `json:"joined,omitempty" bson:"joined,omitempty"`       //timestamp from 01.01.2011 to 01.01.2018
-	Status       string   `json:"status,omitempty" bson:"status,omitempty"`       //"свободны", "заняты", "всё сложно"
-	Interests    []string `json:"interests,omitempty" bson:"interests,omitempty"` //every string is up to 100 symbols, optional
-	interestsMap map[string]bool
-	Premium      *Premium `json:"premium,omitempty" bson:"premium,omitempty"`
-	Likes        []Like   `json:"likes,omitempty" bson:"likes,omitempty"`
-	likesMap     map[int][]int
+	ID           int             `json:"id,omitempty" bson:"id,omitempty"`               //unique
+	Email        string          `json:"email,omitempty" bson:"email,omitempty"`         //up to 100 symbols, unique
+	FName        string          `json:"fname,omitempty" bson:"fname,omitempty"`         //up to 50 symbols, optional
+	SName        string          `json:"sname,omitempty" bson:"sname,omitempty"`         //up to 50 symbols, optional
+	Phone        string          `json:"phone,omitempty" bson:"phone,omitempty"`         //up to 16 symbols, unique, optional
+	Sex          string          `json:"sex,omitempty" bson:"sex,omitempty"`             //m|f
+	Birth        int             `json:"birth,omitempty" bson:"birth,omitempty"`         //timestamp from 01.01.1950 to 01.01.2005
+	Country      string          `json:"country,omitempty" bson:"country,omitempty"`     //up to 50 symbols, optional
+	City         string          `json:"city,omitempty" bson:"city,omitempty"`           //up to 50 symbols, optional, every city belongs to defined country
+	Joined       int             `json:"joined,omitempty" bson:"joined,omitempty"`       //timestamp from 01.01.2011 to 01.01.2018
+	Status       string          `json:"status,omitempty" bson:"status,omitempty"`       //"свободны", "заняты", "всё сложно"
+	Interests    []string        `json:"interests,omitempty" bson:"interests,omitempty"` //every string is up to 100 symbols, optional
+	interestsMap map[string]bool `json:"-"`
+	Premium      *Premium        `json:"premium,omitempty" bson:"premium,omitempty"`
+	Likes        []Like          `json:"likes,omitempty" bson:"likes,omitempty"`
+	likesMap     map[int][]int   `json:"-"`
 }
 
 type Premium struct {
@@ -79,7 +79,7 @@ func (a *Account) CheckCompatibility(account Account, now int) int {
 		compatibility += 100000000000
 	}
 
-	if account.isPremium(now) {
+	if account.PremiumNow(now) {
 		compatibility += 1000000000000
 	}
 
@@ -89,7 +89,7 @@ func (a *Account) CheckCompatibility(account Account, now int) int {
 //func (a *Account) CheckCompatibility(account Account, now int) string {
 //	compatibility := "0"
 //
-//	if account.isPremium(now) {
+//	if account.PremiumNow(now) {
 //		compatibility = "1"
 //	}
 //
@@ -122,16 +122,6 @@ func (a *Account) CheckCompatibility(account Account, now int) int {
 //
 //	return compatibility
 //}
-
-func (a *Account) isPremium(now int) bool {
-	if a.Premium == nil {
-		return false
-	}
-	if a.Premium.Start < now && a.Premium.Finish > now {
-		return true
-	}
-	return false
-}
 
 func (a *Account) PrepareLikesMap() {
 	a.likesMap = make(map[int][]int)
@@ -179,4 +169,50 @@ func (a *Account) GetNewIds(account Account) []int {
 		return ids[i] > ids[j]
 	})
 	return ids
+}
+
+func (a *Account) InterestsContains(interests []string) bool {
+	if len(interests) == 0 {
+		return false
+	}
+	for _, interest := range interests {
+		if _, ok := a.interestsMap[interest]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func (a *Account) InterestsAny(interests []string) bool {
+	if len(interests) == 0 {
+		return false
+	}
+	for _, interest := range interests {
+		if _, ok := a.interestsMap[interest]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *Account) LikesContains(likes []int) bool {
+	if len(likes) == 0 {
+		return false
+	}
+	for _, like := range likes {
+		if _, ok := a.likesMap[like]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func (a *Account) PremiumNow(now int) bool {
+	if a.Premium == nil {
+		return false
+	}
+	if a.Premium.Start < now && a.Premium.Finish > now {
+		return true
+	}
+	return false
 }

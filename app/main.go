@@ -12,24 +12,20 @@ import (
 )
 
 const (
-	mongoAddrEnvName = "MONGO_ADDR"
-	defaultMongoAddr = "mongodb://:27017"
-
 	listenAddrEnvName = "SERVER_ADDR"
 	defaultListenAddr = ":80"
 
-	optionsFilePath = "/tmp/data/options.txt" //todo docker
-	dataFilePath    = "/tmp/data/data.zip"
+	//optionsFilePath = "/tmp/data/options.txt" //todo docker
+	//dataFilePath    = "/tmp/data/data.zip"
 
 	//optionsFilePath = "/home/zzsdeo/tmp/data/options.txt" //todo hp
 	//dataFilePath    = "/home/zzsdeo/tmp/data/data.zip"
 
-	//optionsFilePath = "./tmp/data/options.txt" //todo home
-	//dataFilePath    = "./tmp/data/data.zip"
+	optionsFilePath = "./tmp/data/options.txt" //todo home
+	dataFilePath    = "./tmp/data/data.zip"
 )
 
 type opts struct {
-	mongoAddr  string
 	listenAddr string
 	now        int
 }
@@ -39,11 +35,9 @@ func main() {
 
 	app := rest.App{}
 
-	app.Initialize(opts.mongoAddr)
+	app.Initialize()
 
 	app.SetNow(opts.now)
-
-	app.DropCollection()
 
 	r, err := readZip()
 	if err != nil {
@@ -60,8 +54,6 @@ func main() {
 
 	app.CheckDB()
 
-	app.DropAllIndexes()
-
 	app.CreateIndexes(false)
 
 	app.Run(opts.listenAddr)
@@ -69,11 +61,6 @@ func main() {
 
 func parseOpts() opts {
 	opts := opts{}
-
-	opts.mongoAddr = os.Getenv(mongoAddrEnvName)
-	if opts.mongoAddr == "" {
-		opts.mongoAddr = defaultMongoAddr
-	}
 
 	opts.listenAddr = os.Getenv(listenAddrEnvName)
 	if opts.listenAddr == "" {
