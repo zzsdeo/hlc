@@ -9,30 +9,81 @@ import (
 )
 
 type DB struct {
-	mu         sync.RWMutex
-	accounts   map[int]models.Account
-	sexIdx     map[string]map[int]bool
-	statusIdx  map[string]map[int]bool
-	fnameIdx   map[string]map[int]bool
-	snameIdx   map[string]map[int]bool
-	phoneIdx   map[string]map[int]bool
-	countryIdx map[string]map[int]bool
-	cityIdx    map[string]map[int]bool
+	mu             sync.RWMutex
+	accounts       map[int]models.Account
+	sexIdx         map[string]map[int]bool
+	statusIdx      map[string]map[int]bool
+	fnameIdx       map[string]map[int]bool
+	snameIdx       map[string]map[int]bool
+	phoneIdx       map[string]map[int]bool
+	countryIdx     map[string]map[int]bool
+	cityIdx        map[string]map[int]bool
+	emailIdx       []emailIdxEntry
+	emailDomainIdx map[string]map[int]bool
 }
 
 type M map[string]interface{}
 
+type emailIdxEntry struct {
+	email string
+	id    int
+}
+
 func NewDB() *DB {
 	return &DB{
-		accounts:   make(map[int]models.Account),
-		sexIdx:     make(map[string]map[int]bool),
-		statusIdx:  make(map[string]map[int]bool),
-		fnameIdx:   make(map[string]map[int]bool),
-		snameIdx:   make(map[string]map[int]bool),
-		phoneIdx:   make(map[string]map[int]bool),
-		countryIdx: make(map[string]map[int]bool),
-		cityIdx:    make(map[string]map[int]bool),
+		accounts:       make(map[int]models.Account),
+		sexIdx:         make(map[string]map[int]bool),
+		statusIdx:      make(map[string]map[int]bool),
+		fnameIdx:       make(map[string]map[int]bool),
+		snameIdx:       make(map[string]map[int]bool),
+		phoneIdx:       make(map[string]map[int]bool),
+		countryIdx:     make(map[string]map[int]bool),
+		cityIdx:        make(map[string]map[int]bool),
+		emailIdx:       make([]emailIdxEntry, 0),
+		emailDomainIdx: make(map[string]map[int]bool),
 	}
+}
+
+func (db *DB) getEmailLtIdxEntries(prefix string) []emailIdxEntry {
+	low := 0
+	high := len(db.emailIdx) - 1
+
+	for low <= high {
+		mid := (low + high) / 2
+		guess := db.emailIdx[mid]
+		if guess.email <= prefix && mid+1 < len(db.emailIdx) && db.emailIdx[mid+1].email > prefix {
+			return db.emailIdx[:mid+1]
+		}
+
+		if guess.email > prefix {
+			high = mid - 1
+		} else {
+			low = mid + 1
+		}
+	}
+
+	return []emailIdxEntry{}
+}
+
+func (db *DB) getEmailGtIdxEntries(prefix string) []emailIdxEntry {
+	low := 0
+	high := len(db.emailIdx) - 1
+
+	for low <= high {
+		mid := (low + high) / 2
+		guess := db.emailIdx[mid]
+		if guess.email >= prefix && mid-1 >= 0 && db.emailIdx[mid-1].email < prefix {
+			return db.emailIdx[mid:]
+		}
+
+		if guess.email > prefix {
+			high = mid - 1
+		} else {
+			low = mid + 1
+		}
+	}
+
+	return []emailIdxEntry{}
 }
 
 func (db *DB) LoadData(accounts []models.Account) bool {
@@ -89,7 +140,18 @@ func (db *DB) CreateIndexes() bool {
 			db.cityIdx[v.City] = make(map[int]bool)
 		}
 		db.cityIdx[v.City][k] = true
+
+		db.emailIdx = append(db.emailIdx, emailIdxEntry{v.Email, k})
+
+		domain := strings.Split(v.Email, "@")[1]
+		if _, ok := db.emailDomainIdx[domain]; !ok {
+			db.emailDomainIdx[domain] = make(map[int]bool)
+		}
+		db.emailDomainIdx[domain][k] = true
 	}
+	sort.Slice(db.emailIdx, func(i, j int) bool {
+		return db.emailIdx[i].email < db.emailIdx[j].email
+	})
 	db.mu.RUnlock()
 	return true
 }
@@ -242,6 +304,25 @@ func (db *DB) Find(query M) models.Accounts {
 			}
 			projection["city"] = true
 			delete(query, k)
+		case "email_domain":
+			res = append(res, db.emailDomainIdx[v.(string)])
+			delete(query, k)
+		case "email_lt":
+			x := db.getEmailLtIdxEntries(v.(string))
+			ids := make(map[int]bool)
+			for _, e := range x {
+				ids[e.id] = true
+			}
+			res = append(res, ids)
+			delete(query, k)
+		case "email_gt":
+			x := db.getEmailGtIdxEntries(v.(string))
+			ids := make(map[int]bool)
+			for _, e := range x {
+				ids[e.id] = true
+			}
+			res = append(res, ids)
+			delete(query, k)
 		}
 	}
 
@@ -282,18 +363,18 @@ MainLoop:
 	for _, account := range accounts.Accounts {
 		for k, v := range query {
 			switch k {
-			case "email_domain":
-				if !strings.Contains(account.Email, "@"+v.(string)) {
-					continue MainLoop
-				}
-			case "email_lt":
-				if account.Email > v.(string) {
-					continue MainLoop
-				}
-			case "email_gt":
-				if account.Email < v.(string) {
-					continue MainLoop
-				}
+			//case "email_domain":
+			//	if !strings.Contains(account.Email, "@"+v.(string)) {
+			//		continue MainLoop
+			//	}
+			//case "email_lt":
+			//	if account.Email > v.(string) {
+			//		continue MainLoop
+			//	}
+			//case "email_gt":
+			//	if account.Email < v.(string) {
+			//		continue MainLoop
+			//	}
 			case "sname_starts":
 				projection["sname"] = true
 				if !strings.HasPrefix(account.SName, v.(string)) {

@@ -3,7 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bufio"
-	"encoding/json"
+	"github.com/mailru/easyjson"
 	"hlc/app/models"
 	"hlc/app/rest"
 	"log"
@@ -107,7 +107,8 @@ func parseData(f *zip.File) (models.Accounts, error) {
 		}
 	}()
 
-	err = json.NewDecoder(file).Decode(&accounts)
+	err = easyjson.UnmarshalFromReader(file, &accounts)
+	//err = json.NewDecoder(file).Decode(&accounts)
 	if err != nil {
 		return accounts, err
 	}

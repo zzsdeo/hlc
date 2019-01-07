@@ -67,7 +67,7 @@ func (a *App) initializeRoutes() {
 }
 
 func (a *App) filter(w http.ResponseWriter, r *http.Request) {
-	defer utils.TimeTrack(time.Now(), "request")
+	defer utils.TimeTrack(time.Now(), r.URL.Query()["query_id"][0])
 	//w.Header().Set("Content-Type", "application/json")
 	query := store.M{}
 	for k, v := range r.URL.Query() {
