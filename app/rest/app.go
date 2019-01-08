@@ -31,17 +31,19 @@ func (a *App) SetNow(now int) {
 
 func (a *App) LoadData(accounts []models.Account) {
 	a.db.LoadData(accounts)
+	//a.db.LoadMinData(accounts)
 	log.Println("[INFO] all accounts added")
 }
 
 func (a *App) CheckDB() {
-	recs := a.db.Count()
+	//recs := a.db.Count()
+	recs := a.db.CountMin()
 	log.Println("[INFO] recs added=", recs)
 }
 
 func (a *App) CreateIndexes(background bool) {
 	log.Println("[INFO] indexing started")
-	a.db.CreateIndexes()
+	a.db.CreateIndexes(a.now)
 	if !background {
 		log.Println("[INFO] indexing finished")
 	}
