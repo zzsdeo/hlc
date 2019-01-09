@@ -24,6 +24,7 @@ type DB struct {
 	minData
 	mu             sync.RWMutex
 	accounts       map[int]models.Account
+	ids            []int
 	sexIdx         map[string]map[int]bool
 	statusIdx      map[string]map[int]bool
 	fnameIdx       map[string]map[int]bool
@@ -61,6 +62,7 @@ type trieNode struct {
 func NewDB() *DB {
 	return &DB{
 		accounts:       make(map[int]models.Account),
+		ids:            make([]int, 0),
 		sexIdx:         make(map[string]map[int]bool),
 		statusIdx:      make(map[string]map[int]bool),
 		fnameIdx:       make(map[string]map[int]bool),
@@ -432,6 +434,8 @@ func (db *DB) CreateIndexes(now int) bool {
 				db.premiumIdx["now"][k] = true
 			}
 		}
+
+		db.ids = append(db.ids, k)
 	}
 	sort.Slice(db.emailIdx, func(i, j int) bool {
 		return db.emailIdx[i].email < db.emailIdx[j].email
@@ -439,14 +443,32 @@ func (db *DB) CreateIndexes(now int) bool {
 	sort.Slice(db.birthIdx, func(i, j int) bool {
 		return db.birthIdx[i].birth < db.birthIdx[j].birth
 	})
+	sort.Slice(db.ids, func(i, j int) bool {
+		return db.ids[i] > db.ids[j]
+	})
 	db.mu.RUnlock()
 	runtime.GC()
+	//log.Println("indexes size", utils.Sizeof(
+	//	db.sexIdx,
+	//	db.statusIdx,
+	//	db.fnameIdx,
+	//	db.snameIdx,
+	//	db.phoneIdx,
+	//	db.countryIdx,
+	//	db.cityIdx,
+	//	db.emailIdx,
+	//	db.emailDomainIdx,
+	//	db.snamePrefixIdx,
+	//	db.birthIdx,
+	//	db.birthYearIdx,
+	//	db.interestsIdx,
+	//	db.likesIdx,
+	//	db.premiumIdx))
 	return true
 }
 
 func (db *DB) Find(query M) models.Accounts {
 	//log.Println("[DEBUG] query", query)
-	accounts := models.Accounts{}
 	res := make([]map[int]bool, 0)
 	projection := make(map[string]bool)
 	for k, v := range query {
@@ -707,16 +729,31 @@ func (db *DB) Find(query M) models.Accounts {
 		}
 	}
 
+	limit := query["limit"].(int)
+	ids := make([]int, 0)
+	accounts := models.Accounts{}
+	accounts.Accounts = make([]models.Account, 0)
+
 	if len(res) == 0 {
-		for _, account := range db.accounts {
-			accounts.Accounts = append(accounts.Accounts, account)
+		for i := 0; i < limit; i++ {
+			accounts.Accounts = append(accounts.Accounts, db.accounts[db.ids[i]])
 		}
 	} else if len(res) == 1 {
 		for id, _ := range res[0] {
+			ids = append(ids, id)
+		}
+		sort.Slice(ids, func(i, j int) bool {
+			return ids[i] > ids[j]
+		})
+
+		if len(ids) > limit {
+			ids = ids[:limit]
+		}
+		for _, id := range ids {
 			accounts.Accounts = append(accounts.Accounts, db.accounts[id])
 		}
 	} else {
-		ids := make(map[int]bool)
+		idsMap := make(map[int]bool)
 		sort.Slice(res, func(i, j int) bool {
 			return len(res[i]) < len(res[j])
 		})
@@ -728,70 +765,66 @@ func (db *DB) Find(query M) models.Accounts {
 					continue MinResLoop
 				}
 			}
-			ids[k] = true
+			idsMap[k] = true
 		}
 
-		for id, _ := range ids {
+		for id, _ := range idsMap {
+			ids = append(ids, id)
+		}
+		sort.Slice(ids, func(i, j int) bool {
+			return ids[i] > ids[j]
+		})
+
+		if len(ids) > limit {
+			ids = ids[:limit]
+		}
+		for _, id := range ids {
 			accounts.Accounts = append(accounts.Accounts, db.accounts[id])
 		}
 	}
 
-	sort.Slice(accounts.Accounts, func(i, j int) bool {
-		return accounts.Accounts[i].ID > accounts.Accounts[j].ID
-	})
+	for i, _ := range accounts.Accounts {
 
-	limit := query["limit"].(int)
-	if limit < len(accounts.Accounts) {
-		accounts.Accounts = accounts.Accounts[:limit]
-	}
-
-	result := models.Accounts{}
-	result.Accounts = make([]models.Account, 0)
-
-	for _, account := range accounts.Accounts {
-
-		account.Interests = []string{}
-		account.Likes = []models.Like{}
-		account.Joined = 0
+		accounts.Accounts[i].Interests = []string{}
+		accounts.Accounts[i].Likes = []models.Like{}
+		accounts.Accounts[i].Joined = 0
 
 		if ok, _ := projection["fname"]; !ok {
-			account.FName = ""
+			accounts.Accounts[i].FName = ""
 		}
 
 		if ok, _ := projection["sname"]; !ok {
-			account.SName = ""
+			accounts.Accounts[i].SName = ""
 		}
 
 		if ok, _ := projection["phone"]; !ok {
-			account.Phone = ""
+			accounts.Accounts[i].Phone = ""
 		}
 
 		if ok, _ := projection["sex"]; !ok {
-			account.Sex = ""
+			accounts.Accounts[i].Sex = ""
 		}
 
 		if ok, _ := projection["birth"]; !ok {
-			account.Birth = 0
+			accounts.Accounts[i].Birth = 0
 		}
 
 		if ok, _ := projection["country"]; !ok {
-			account.Country = ""
+			accounts.Accounts[i].Country = ""
 		}
 
 		if ok, _ := projection["city"]; !ok {
-			account.City = ""
+			accounts.Accounts[i].City = ""
 		}
 
 		if ok, _ := projection["status"]; !ok {
-			account.Status = ""
+			accounts.Accounts[i].Status = ""
 		}
 
 		if ok, _ := projection["premium"]; !ok {
-			account.Premium = nil
+			accounts.Accounts[i].Premium = nil
 		}
-
-		result.Accounts = append(result.Accounts, account)
 	}
 
-	return result
+	return accounts
 }

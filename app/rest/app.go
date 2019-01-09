@@ -1,225 +1,459 @@
 package rest
 
 import (
+	"bytes"
 	"github.com/gorilla/mux"
 	"github.com/mailru/easyjson"
+	"github.com/valyala/fasthttp"
 	"hlc/app/models"
 	"hlc/app/store"
-	"hlc/app/utils"
 	"log"
-	"net/http"
 	"strconv"
 	"strings"
-	"time"
 )
 
-type App struct {
-	router *mux.Router
-	db     *store.DB
-	now    int //current time from options.txt
+type queryKeys struct {
+	SexEq             []byte
+	EmailDomain       []byte
+	EmailLt           []byte
+	EmailGt           []byte
+	StatusEq          []byte
+	StatusNeq         []byte
+	FNameEq           []byte
+	FNameAny          []byte
+	FNameNull         []byte
+	SNameEq           []byte
+	SNameStarts       []byte
+	SNameNull         []byte
+	PhoneCode         []byte
+	PhoneNull         []byte
+	CountryEq         []byte
+	CountryNull       []byte
+	CityEq            []byte
+	CityAny           []byte
+	CityNull          []byte
+	BirthLt           []byte
+	BirthGt           []byte
+	BirthYear         []byte
+	InterestsContains []byte
+	InterestsAny      []byte
+	LikesContains     []byte
+	PremiumNow        []byte
+	PremiumNull       []byte
+	Limit             []byte
+	QueryId           []byte
 }
 
-func (a *App) Initialize() {
+type App struct {
+	queryKeys
+	router     *mux.Router
+	db         *store.DB
+	now        int //current time from options.txt
+	filterPath []byte
+}
+
+func (a *App) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
+	if ctx.IsGet() {
+		if bytes.Equal(ctx.Path(), a.filterPath) {
+			a.filter(ctx)
+		}
+	} else {
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+	}
+}
+
+func (a *App) Initialize(now int) {
 	a.router = mux.NewRouter()
 	a.db = store.NewDB()
-	a.initializeRoutes()
-}
-
-func (a *App) SetNow(now int) {
+	//a.initializeRoutes()
+	a.filterPath = []byte("/accounts/filter/")
 	a.now = now
+
+	a.SexEq = []byte("sex_eq")
+	a.EmailDomain = []byte("email_domain")
+	a.EmailLt = []byte("email_lt")
+	a.EmailGt = []byte("email_gt")
+	a.StatusEq = []byte("status_eq")
+	a.StatusNeq = []byte("status_neq")
+	a.FNameEq = []byte("fname_eq")
+	a.FNameAny = []byte("fname_any")
+	a.FNameNull = []byte("fname_null")
+	a.SNameEq = []byte("sname_eq")
+	a.SNameStarts = []byte("sname_starts")
+	a.SNameNull = []byte("sname_null")
+	a.PhoneCode = []byte("phone_code")
+	a.PhoneNull = []byte("phone_null")
+	a.CountryEq = []byte("country_eq")
+	a.CountryNull = []byte("country_null")
+	a.CityEq = []byte("city_eq")
+	a.CityAny = []byte("city_any")
+	a.CityNull = []byte("city_null")
+	a.BirthLt = []byte("birth_lt")
+	a.BirthGt = []byte("birth_gt")
+	a.BirthYear = []byte("birth_year")
+	a.InterestsContains = []byte("interests_contains")
+	a.InterestsAny = []byte("interests_any")
+	a.LikesContains = []byte("likes_contains")
+	a.PremiumNow = []byte("premium_now")
+	a.PremiumNull = []byte("premium_null")
+	a.Limit = []byte("limit")
+	a.QueryId = []byte("query_id")
 }
 
 func (a *App) LoadData(accounts []models.Account) {
 	a.db.LoadData(accounts)
 	//a.db.LoadMinData(accounts)
-	log.Println("[INFO] all accounts added")
+	log.Println("[INFO] added ", len(accounts), " accounts")
 }
 
-func (a *App) CheckDB() {
-	//recs := a.db.Count()
-	recs := a.db.CountMin()
-	log.Println("[INFO] recs added=", recs)
-}
-
-func (a *App) CreateIndexes(background bool) {
+func (a *App) CreateIndexes() {
 	log.Println("[INFO] indexing started")
 	a.db.CreateIndexes(a.now)
-	if !background {
-		log.Println("[INFO] indexing finished")
-	}
+	log.Println("[INFO] indexing finished")
 }
 
 func (a *App) Run(listenAddr string) {
 	log.Println("[INFO] start server on", listenAddr)
-	log.Fatal("[ERROR] ", http.ListenAndServe(listenAddr, a.router))
+	//log.Fatal("[ERROR] ", http.ListenAndServe(listenAddr, a.router))
+	log.Fatal("[ERROR] ", fasthttp.ListenAndServe(listenAddr, a.HandleFastHTTP))
 }
 
-func (a *App) initializeRoutes() {
-	a.router.HandleFunc("/accounts/filter/", a.filter).Methods(http.MethodGet)
-	//a.router.HandleFunc("/accounts/group/", a.group).Methods(http.MethodGet)
-	//a.router.HandleFunc("/accounts/{id}/recommend/", a.recommend).Methods(http.MethodGet)
-	//a.router.HandleFunc("/accounts/{id}/suggest/", a.suggest).Methods(http.MethodGet)
+//func (a *App) initializeRoutes() {
+//	a.router.HandleFunc("/accounts/filter/", a.filter).Methods(http.MethodGet)
+//	//a.router.HandleFunc("/accounts/group/", a.group).Methods(http.MethodGet)
+//	//a.router.HandleFunc("/accounts/{id}/recommend/", a.recommend).Methods(http.MethodGet)
+//	//a.router.HandleFunc("/accounts/{id}/suggest/", a.suggest).Methods(http.MethodGet)
+//
+//	// Регистрация pprof-обработчиков
+//	//a.router.HandleFunc("/debug/pprof/", pprof.Index)
+//	//a.router.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+//	//a.router.HandleFunc("/debug/pprof/profile", pprof.Profile)
+//	//a.router.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+//	//a.router.HandleFunc("/debug/pprof/trace", pprof.Trace)
+//}
 
-	// Регистрация pprof-обработчиков
-	//a.router.HandleFunc("/debug/pprof/", pprof.Index)
-	//a.router.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	//a.router.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	//a.router.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	//a.router.HandleFunc("/debug/pprof/trace", pprof.Trace)
-}
-
-func (a *App) filter(w http.ResponseWriter, r *http.Request) {
-	defer utils.TimeTrack(time.Now(), r.URL.Query()["query_id"][0])
-	//w.Header().Set("Content-Type", "application/json")
+func (a *App) filter(ctx *fasthttp.RequestCtx) {
+	//defer utils.TimeTrack(time.Now(), ctx.QueryArgs().Peek("query_id"))
+	ctx.SetContentType("application/json")
 	query := store.M{}
-	for k, v := range r.URL.Query() {
-		if v[0] == "" {
-			w.WriteHeader(http.StatusBadRequest)
+	isBadArg := false
+	ctx.QueryArgs().VisitAll(func(key, value []byte) {
+		if isBadArg {
 			return
-		}
-		switch k {
-		case "sex_eq":
-			query["sex_eq"] = v[0]
-			continue
-		case "email_domain":
-			query["email_domain"] = v[0]
-			continue
-		case "email_lt":
-			query["email_lt"] = v[0]
-			continue
-		case "email_gt":
-			query["email_gt"] = v[0]
-			continue
-		case "status_eq":
-			query["status_eq"] = v[0]
-			continue
-		case "status_neq":
-			query["status_neq"] = v[0]
-			continue
-		case "fname_eq":
-			query["fname_eq"] = v[0]
-			continue
-		case "fname_any":
-			query["fname_any"] = strings.Split(v[0], ",")
-			continue
-		case "fname_null":
-			query["fname_null"] = v[0]
-			continue
-		case "sname_eq":
-			query["sname_eq"] = v[0]
-			continue
-		case "sname_starts":
-			query["sname_starts"] = v[0]
-			continue
-		case "sname_null":
-			query["sname_null"] = v[0]
-			continue
-		case "phone_code":
-			query["phone_code"] = v[0]
-			continue
-		case "phone_null":
-			query["phone_null"] = v[0]
-			continue
-		case "country_eq":
-			query["country_eq"] = v[0]
-			continue
-		case "country_null":
-			query["country_null"] = v[0]
-			continue
-		case "city_eq":
-			query["city_eq"] = v[0]
-			continue
-		case "city_any":
-			query["city_any"] = strings.Split(v[0], ",")
-			continue
-		case "city_null":
-			query["city_null"] = v[0]
-			continue
-		case "birth_lt":
-			birth, err := strconv.Atoi(v[0])
+		} else if len(value) == 0 {
+			isBadArg = true
+			return
+		} else if bytes.Equal(key, a.SexEq) {
+			query["sex_eq"] = string(value)
+			return
+		} else if bytes.Equal(key, a.EmailDomain) {
+			query["email_domain"] = string(value)
+			return
+		} else if bytes.Equal(key, a.EmailLt) {
+			query["email_lt"] = string(value)
+			return
+		} else if bytes.Equal(key, a.EmailGt) {
+			query["email_gt"] = string(value)
+			return
+		} else if bytes.Equal(key, a.StatusEq) {
+			query["status_eq"] = string(value)
+			return
+		} else if bytes.Equal(key, a.StatusNeq) {
+			query["status_neq"] = string(value)
+			return
+		} else if bytes.Equal(key, a.FNameEq) {
+			query["fname_eq"] = string(value)
+			return
+		} else if bytes.Equal(key, a.FNameAny) {
+			query["fname_any"] = strings.Split(string(value), ",")
+			return
+		} else if bytes.Equal(key, a.FNameNull) {
+			query["fname_null"] = string(value)
+			return
+		} else if bytes.Equal(key, a.SNameEq) {
+			query["sname_eq"] = string(value)
+			return
+		} else if bytes.Equal(key, a.SNameStarts) {
+			query["sname_starts"] = string(value)
+			return
+		} else if bytes.Equal(key, a.SNameNull) {
+			query["sname_null"] = string(value)
+			return
+		} else if bytes.Equal(key, a.PhoneCode) {
+			query["phone_code"] = string(value)
+			return
+		} else if bytes.Equal(key, a.PhoneNull) {
+			query["phone_null"] = string(value)
+			return
+		} else if bytes.Equal(key, a.CountryEq) {
+			query["country_eq"] = string(value)
+			return
+		} else if bytes.Equal(key, a.CountryNull) {
+			query["country_null"] = string(value)
+			return
+		} else if bytes.Equal(key, a.CityEq) {
+			query["city_eq"] = string(value)
+			return
+		} else if bytes.Equal(key, a.CityAny) {
+			query["city_any"] = strings.Split(string(value), ",")
+			return
+		} else if bytes.Equal(key, a.CityNull) {
+			query["city_null"] = string(value)
+			return
+		} else if bytes.Equal(key, a.BirthLt) {
+			birth, err := strconv.Atoi(string(value))
 			if err != nil {
 				log.Println("[ERROR] ", err)
-				w.WriteHeader(http.StatusBadRequest)
+				isBadArg = true
 				return
 			}
 			query["birth_lt"] = birth
-			continue
-		case "birth_gt":
-			birth, err := strconv.Atoi(v[0])
+			return
+		} else if bytes.Equal(key, a.BirthGt) {
+			birth, err := strconv.Atoi(string(value))
 			if err != nil {
 				log.Println("[ERROR] ", err)
-				w.WriteHeader(http.StatusBadRequest)
+				isBadArg = true
 				return
 			}
 			query["birth_gt"] = birth
-			continue
-		case "birth_year":
-			year, err := strconv.Atoi(v[0])
+			return
+		} else if bytes.Equal(key, a.BirthYear) {
+			year, err := strconv.Atoi(string(value))
 			if err != nil {
 				log.Println("[ERROR] ", err)
-				w.WriteHeader(http.StatusBadRequest)
+				isBadArg = true
 				return
 			}
 			query["birth_year"] = year
-			continue
-		case "interests_contains":
-			query["interests_contains"] = strings.Split(v[0], ",")
-			continue
-		case "interests_any":
-			query["interests_any"] = strings.Split(v[0], ",")
-			continue
-		case "likes_contains":
-			likes := strings.Split(v[0], ",")
+			return
+		} else if bytes.Equal(key, a.InterestsContains) {
+			query["interests_contains"] = strings.Split(string(value), ",")
+			return
+		} else if bytes.Equal(key, a.InterestsAny) {
+			query["interests_any"] = strings.Split(string(value), ",")
+			return
+		} else if bytes.Equal(key, a.LikesContains) {
+			likes := strings.Split(string(value), ",")
 			likeIds := make([]int, 0)
 			for _, like := range likes {
 				l, err := strconv.Atoi(like)
 				if err != nil {
 					log.Println("[ERROR] ", err)
-					w.WriteHeader(http.StatusBadRequest)
+					isBadArg = true
 					return
 				}
 				likeIds = append(likeIds, l)
 			}
 			//log.Println("[DEBUG] ", likeIds)
 			query["likes_contains"] = likeIds
-			continue
-		case "premium_now":
+			return
+		} else if bytes.Equal(key, a.PremiumNow) {
 			query["premium_now"] = a.now
-			continue
-		case "premium_null":
-			query["premium_null"] = v[0]
-			continue
-		case "limit":
-			limit, err := strconv.Atoi(v[0])
+			return
+		} else if bytes.Equal(key, a.PremiumNull) {
+			query["premium_null"] = string(value)
+			return
+		} else if bytes.Equal(key, a.Limit) {
+			limit, err := strconv.Atoi(string(value))
 			if err != nil {
 				log.Println("[ERROR] ", err)
-				w.WriteHeader(http.StatusBadRequest)
+				isBadArg = true
 				return
 			}
 			if limit < 0 {
-				w.WriteHeader(http.StatusBadRequest)
+				isBadArg = true
 				return
 			}
 			query["limit"] = limit
-			continue
-		case "query_id":
-			continue
-		default:
-			w.WriteHeader(http.StatusBadRequest)
+			return
+		} else if bytes.Equal(key, a.QueryId) {
+			return
+		} else {
+			isBadArg = true
 			return
 		}
-	}
+	})
 
 	//log.Println("[DEBUG] query=", query)
 
+	if isBadArg {
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		return
+	}
+
 	accounts := a.db.Find(query)
-	_, _, err := easyjson.MarshalToHTTPResponseWriter(accounts, w)
+
+	b, err := easyjson.Marshal(&accounts)
 	//err := json.NewEncoder(w).Encode(a.db.Find(query))
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		log.Println("[ERROR] ", err)
+		return
 	}
+
+	_, err = ctx.Write(b)
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		log.Println("[ERROR] ", err)
+		return
+	}
+
+	ctx.SetStatusCode(fasthttp.StatusOK)
 }
+
+//func (a *App) filter(w http.ResponseWriter, r *http.Request) {
+//	defer utils.TimeTrack(time.Now(), r.URL.Query()["query_id"][0])
+//	//w.Header().Set("Content-Type", "application/json")
+//	query := store.M{}
+//	for k, v := range r.URL.Query() {
+//		if v[0] == "" {
+//			w.WriteHeader(http.StatusBadRequest)
+//			return
+//		}
+//		switch k {
+//		case "sex_eq":
+//			query["sex_eq"] = v[0]
+//			continue
+//		case "email_domain":
+//			query["email_domain"] = v[0]
+//			continue
+//		case "email_lt":
+//			query["email_lt"] = v[0]
+//			continue
+//		case "email_gt":
+//			query["email_gt"] = v[0]
+//			continue
+//		case "status_eq":
+//			query["status_eq"] = v[0]
+//			continue
+//		case "status_neq":
+//			query["status_neq"] = v[0]
+//			continue
+//		case "fname_eq":
+//			query["fname_eq"] = v[0]
+//			continue
+//		case "fname_any":
+//			query["fname_any"] = strings.Split(v[0], ",")
+//			continue
+//		case "fname_null":
+//			query["fname_null"] = v[0]
+//			continue
+//		case "sname_eq":
+//			query["sname_eq"] = v[0]
+//			continue
+//		case "sname_starts":
+//			query["sname_starts"] = v[0]
+//			continue
+//		case "sname_null":
+//			query["sname_null"] = v[0]
+//			continue
+//		case "phone_code":
+//			query["phone_code"] = v[0]
+//			continue
+//		case "phone_null":
+//			query["phone_null"] = v[0]
+//			continue
+//		case "country_eq":
+//			query["country_eq"] = v[0]
+//			continue
+//		case "country_null":
+//			query["country_null"] = v[0]
+//			continue
+//		case "city_eq":
+//			query["city_eq"] = v[0]
+//			continue
+//		case "city_any":
+//			query["city_any"] = strings.Split(v[0], ",")
+//			continue
+//		case "city_null":
+//			query["city_null"] = v[0]
+//			continue
+//		case "birth_lt":
+//			birth, err := strconv.Atoi(v[0])
+//			if err != nil {
+//				log.Println("[ERROR] ", err)
+//				w.WriteHeader(http.StatusBadRequest)
+//				return
+//			}
+//			query["birth_lt"] = birth
+//			continue
+//		case "birth_gt":
+//			birth, err := strconv.Atoi(v[0])
+//			if err != nil {
+//				log.Println("[ERROR] ", err)
+//				w.WriteHeader(http.StatusBadRequest)
+//				return
+//			}
+//			query["birth_gt"] = birth
+//			continue
+//		case "birth_year":
+//			year, err := strconv.Atoi(v[0])
+//			if err != nil {
+//				log.Println("[ERROR] ", err)
+//				w.WriteHeader(http.StatusBadRequest)
+//				return
+//			}
+//			query["birth_year"] = year
+//			continue
+//		case "interests_contains":
+//			query["interests_contains"] = strings.Split(v[0], ",")
+//			continue
+//		case "interests_any":
+//			query["interests_any"] = strings.Split(v[0], ",")
+//			continue
+//		case "likes_contains":
+//			likes := strings.Split(v[0], ",")
+//			likeIds := make([]int, 0)
+//			for _, like := range likes {
+//				l, err := strconv.Atoi(like)
+//				if err != nil {
+//					log.Println("[ERROR] ", err)
+//					w.WriteHeader(http.StatusBadRequest)
+//					return
+//				}
+//				likeIds = append(likeIds, l)
+//			}
+//			//log.Println("[DEBUG] ", likeIds)
+//			query["likes_contains"] = likeIds
+//			continue
+//		case "premium_now":
+//			query["premium_now"] = a.now
+//			continue
+//		case "premium_null":
+//			query["premium_null"] = v[0]
+//			continue
+//		case "limit":
+//			limit, err := strconv.Atoi(v[0])
+//			if err != nil {
+//				log.Println("[ERROR] ", err)
+//				w.WriteHeader(http.StatusBadRequest)
+//				return
+//			}
+//			if limit < 0 {
+//				w.WriteHeader(http.StatusBadRequest)
+//				return
+//			}
+//			query["limit"] = limit
+//			continue
+//		case "query_id":
+//			continue
+//		default:
+//			w.WriteHeader(http.StatusBadRequest)
+//			return
+//		}
+//	}
+//
+//	//log.Println("[DEBUG] query=", query)
+//
+//	accounts := a.db.Find(query)
+//	_, _, err := easyjson.MarshalToHTTPResponseWriter(accounts, w)
+//	//err := json.NewEncoder(w).Encode(a.db.Find(query))
+//	if err != nil {
+//		w.WriteHeader(http.StatusInternalServerError)
+//		log.Println("[ERROR] ", err)
+//	}
+//}
 
 //func (a *App) group(w http.ResponseWriter, r *http.Request) {
 //	w.Header().Set("Content-Type", "application/json")
