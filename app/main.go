@@ -55,10 +55,6 @@ func main() {
 		log.Fatal("[ERROR] ", err)
 	}
 
-	//for _, s := range openF() {
-	//	app.LoadData(pd(s).Accounts)
-	//}
-
 	app.CreateIndexes()
 
 	app.Run(opts.listenAddr)
@@ -118,18 +114,3 @@ func parseData(f *zip.File) (models.Accounts, error) {
 
 	return accounts, nil
 }
-
-//func openF() []string {
-//	f, _ := os.Open(dataPath)
-//	fs, _ := f.Readdirnames(-1)
-//	f.Close()
-//	return fs
-//}
-//
-//func pd(f string) models.Accounts {
-//	accounts := models.Accounts{}
-//	file, _ := os.Open(dataPath + f)
-//	easyjson.UnmarshalFromReader(file, &accounts)
-//	file.Close()
-//	return accounts
-//}

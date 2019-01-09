@@ -1,13 +1,13 @@
 FROM golang:1.11.2 as builder
 WORKDIR /go/src/hlc
 #install easyjson
-RUN go get -u github.com/mailru/easyjson/...
+#RUN go get -u github.com/mailru/easyjson/...
 #copy sources
 COPY app ./app
 COPY Gopkg.lock Gopkg.toml ./
 #generate easyjson marshallers/unmarshallers
-WORKDIR /go/src/hlc/app/models
-RUN easyjson -all account.go
+#WORKDIR /go/src/hlc/app/models
+#RUN easyjson -all account.go
 #install dep
 WORKDIR /go/src/hlc
 RUN curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh

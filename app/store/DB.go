@@ -22,24 +22,28 @@ type minData struct {
 
 type DB struct {
 	minData
-	mu             sync.RWMutex
-	accounts       map[int]models.Account
-	ids            []int
-	sexIdx         map[string]map[int]bool
-	statusIdx      map[string]map[int]bool
-	fnameIdx       map[string]map[int]bool
-	snameIdx       map[string]map[int]bool
-	phoneIdx       map[string]map[int]bool
-	countryIdx     map[string]map[int]bool
-	cityIdx        map[string]map[int]bool
-	emailIdx       []emailIdxEntry
-	emailDomainIdx map[string]map[int]bool
-	snamePrefixIdx trieNode
-	birthIdx       []birthIdxEntry
-	birthYearIdx   map[int]map[int]bool
-	interestsIdx   map[string]map[int]bool
-	likesIdx       map[int]map[int]bool
-	premiumIdx     map[string]map[int]bool
+	mu                sync.RWMutex
+	accounts          map[int]models.Account
+	ids               []int
+	sexIdx            map[string]map[int]bool
+	statusIdx         map[string]map[int]bool
+	fnameIdx          map[string]map[int]bool
+	fnameNotNullIdx   map[int]bool
+	snameIdx          map[string]map[int]bool
+	snameNotNullIdx   map[int]bool
+	phoneIdx          map[string]map[int]bool
+	countryIdx        map[string]map[int]bool
+	countryNotNullIdx map[int]bool
+	cityIdx           map[string]map[int]bool
+	cityNotNullIdx    map[int]bool
+	emailIdx          []emailIdxEntry
+	emailDomainIdx    map[string]map[int]bool
+	snamePrefixIdx    trieNode
+	birthIdx          []birthIdxEntry
+	birthYearIdx      map[int]map[int]bool
+	interestsIdx      map[string]map[int]bool
+	likesIdx          map[int]map[int]bool
+	premiumIdx        map[string]map[int]bool
 }
 
 type M map[string]interface{}
@@ -61,23 +65,27 @@ type trieNode struct {
 
 func NewDB() *DB {
 	return &DB{
-		accounts:       make(map[int]models.Account),
-		ids:            make([]int, 0),
-		sexIdx:         make(map[string]map[int]bool),
-		statusIdx:      make(map[string]map[int]bool),
-		fnameIdx:       make(map[string]map[int]bool),
-		snameIdx:       make(map[string]map[int]bool),
-		phoneIdx:       make(map[string]map[int]bool),
-		countryIdx:     make(map[string]map[int]bool),
-		cityIdx:        make(map[string]map[int]bool),
-		emailIdx:       make([]emailIdxEntry, 0),
-		emailDomainIdx: make(map[string]map[int]bool),
-		snamePrefixIdx: trieNode{next: make(map[int32]trieNode), ids: make(map[int]bool)},
-		birthIdx:       make([]birthIdxEntry, 0),
-		birthYearIdx:   make(map[int]map[int]bool),
-		interestsIdx:   make(map[string]map[int]bool),
-		likesIdx:       make(map[int]map[int]bool),
-		premiumIdx:     make(map[string]map[int]bool),
+		accounts:          make(map[int]models.Account),
+		ids:               make([]int, 0),
+		sexIdx:            make(map[string]map[int]bool),
+		statusIdx:         make(map[string]map[int]bool),
+		fnameIdx:          make(map[string]map[int]bool),
+		fnameNotNullIdx:   make(map[int]bool),
+		snameIdx:          make(map[string]map[int]bool),
+		snameNotNullIdx:   make(map[int]bool),
+		phoneIdx:          make(map[string]map[int]bool),
+		countryIdx:        make(map[string]map[int]bool),
+		countryNotNullIdx: make(map[int]bool),
+		cityIdx:           make(map[string]map[int]bool),
+		cityNotNullIdx:    make(map[int]bool),
+		emailIdx:          make([]emailIdxEntry, 0),
+		emailDomainIdx:    make(map[string]map[int]bool),
+		snamePrefixIdx:    trieNode{next: make(map[int32]trieNode), ids: make(map[int]bool)},
+		birthIdx:          make([]birthIdxEntry, 0),
+		birthYearIdx:      make(map[int]map[int]bool),
+		interestsIdx:      make(map[string]map[int]bool),
+		likesIdx:          make(map[int]map[int]bool),
+		premiumIdx:        make(map[string]map[int]bool),
 
 		minData: minData{
 			accountsMin: map[int]models.AccountMin{},
@@ -196,17 +204,16 @@ func (db *DB) getSnamePrefixIds(prefix string) map[int]bool {
 	return currentNode.ids
 }
 
-func (db *DB) LoadData(accounts []models.Account) bool {
+func (db *DB) LoadData(accounts []models.Account) {
 	db.mu.RLock()
 	for _, account := range accounts {
 		db.accounts[account.ID] = account
 	}
 	db.mu.RUnlock()
 	runtime.GC()
-	return true
 }
 
-func (db *DB) LoadMinData(accounts []models.Account) bool {
+func (db *DB) LoadMinData(accounts []models.Account) {
 	db.mu.RLock()
 	for _, account := range accounts {
 		fnameId := len(db.fnames)
@@ -305,17 +312,6 @@ func (db *DB) LoadMinData(accounts []models.Account) bool {
 	}
 	db.mu.RUnlock()
 	runtime.GC()
-	return true
-}
-
-func (db *DB) Count() int {
-	return len(db.accounts)
-}
-
-func (db *DB) CountMin() int {
-	//log.Println("Real size of accounts:", utils.Sizeof(db.accounts))
-	//log.Println("Real size of accountsMin:", utils.Sizeof(db.accountsMin, db.interests, db.cities, db.countries, db.sex, db.status, db.fnames, db.snames))
-	return len(db.accountsMin)
 }
 
 func (db *DB) CreateIndexes(now int) bool {
@@ -340,10 +336,18 @@ func (db *DB) CreateIndexes(now int) bool {
 		}
 		db.fnameIdx[v.FName][k] = true
 
+		if v.FName != "" {
+			db.fnameNotNullIdx[k] = true
+		}
+
 		if _, ok := db.snameIdx[v.SName]; !ok {
 			db.snameIdx[v.SName] = make(map[int]bool)
 		}
 		db.snameIdx[v.SName][k] = true
+
+		if v.SName != "" {
+			db.snameNotNullIdx[k] = true
+		}
 
 		phoneCode := ""
 		if v.Phone != "" {
@@ -361,10 +365,18 @@ func (db *DB) CreateIndexes(now int) bool {
 		}
 		db.countryIdx[v.Country][k] = true
 
+		if v.Country != "" {
+			db.countryNotNullIdx[k] = true
+		}
+
 		if _, ok := db.cityIdx[v.City]; !ok {
 			db.cityIdx[v.City] = make(map[int]bool)
 		}
 		db.cityIdx[v.City][k] = true
+
+		if v.City != "" {
+			db.cityNotNullIdx[k] = true
+		}
 
 		db.emailIdx = append(db.emailIdx, emailIdxEntry{v.Email, k})
 
@@ -505,15 +517,7 @@ func (db *DB) Find(query M) models.Accounts {
 		case "fname_null":
 			switch v.(string) {
 			case "0":
-				r := make(map[int]bool)
-				for kf, vf := range db.fnameIdx {
-					if kf != "" {
-						for kr, vr := range vf {
-							r[kr] = vr
-						}
-					}
-				}
-				res = append(res, r)
+				res = append(res, db.fnameNotNullIdx)
 			case "1":
 				res = append(res, db.fnameIdx[""])
 			}
@@ -524,15 +528,7 @@ func (db *DB) Find(query M) models.Accounts {
 		case "sname_null":
 			switch v.(string) {
 			case "0":
-				r := make(map[int]bool)
-				for ks, vs := range db.snameIdx {
-					if ks != "" {
-						for kr, vr := range vs {
-							r[kr] = vr
-						}
-					}
-				}
-				res = append(res, r)
+				res = append(res, db.snameNotNullIdx)
 			case "1":
 				res = append(res, db.snameIdx[""])
 			}
@@ -559,15 +555,7 @@ func (db *DB) Find(query M) models.Accounts {
 		case "country_null":
 			switch v.(string) {
 			case "0":
-				r := make(map[int]bool)
-				for kc, vc := range db.countryIdx {
-					if kc != "" {
-						for kr, vr := range vc {
-							r[kr] = vr
-						}
-					}
-				}
-				res = append(res, r)
+				res = append(res, db.countryNotNullIdx)
 			case "1":
 				res = append(res, db.countryIdx[""])
 			}
@@ -587,15 +575,7 @@ func (db *DB) Find(query M) models.Accounts {
 		case "city_null":
 			switch v.(string) {
 			case "0":
-				r := make(map[int]bool)
-				for kc, vc := range db.cityIdx {
-					if kc != "" {
-						for kr, vr := range vc {
-							r[kr] = vr
-						}
-					}
-				}
-				res = append(res, r)
+				res = append(res, db.cityNotNullIdx)
 			case "1":
 				res = append(res, db.cityIdx[""])
 			}
