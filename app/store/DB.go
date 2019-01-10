@@ -2,6 +2,8 @@ package store
 
 import (
 	"hlc/app/models"
+	"hlc/app/utils"
+	"log"
 	"runtime"
 	"sort"
 	"strings"
@@ -27,6 +29,7 @@ type DB struct {
 	ids               []int
 	sexIdx            map[string]map[int]bool
 	statusIdx         map[string]map[int]bool
+	statusNeqIdx      map[string]map[int]bool
 	fnameIdx          map[string]map[int]bool
 	fnameNotNullIdx   map[int]bool
 	snameIdx          map[string]map[int]bool
@@ -69,6 +72,7 @@ func NewDB() *DB {
 		ids:               make([]int, 0),
 		sexIdx:            make(map[string]map[int]bool),
 		statusIdx:         make(map[string]map[int]bool),
+		statusNeqIdx:      map[string]map[int]bool{"заняты": {}, "свободны": {}, "всё сложно": {}},
 		fnameIdx:          make(map[string]map[int]bool),
 		fnameNotNullIdx:   make(map[int]bool),
 		snameIdx:          make(map[string]map[int]bool),
@@ -329,6 +333,18 @@ func (db *DB) CreateIndexes(now int) bool {
 				db.statusIdx[v.Status] = make(map[int]bool)
 			}
 			db.statusIdx[v.Status][k] = true
+
+			switch v.Status {
+			case "заняты":
+				db.statusNeqIdx["свободны"][k] = true
+				db.statusNeqIdx["всё сложно"][k] = true
+			case "свободны":
+				db.statusNeqIdx["заняты"][k] = true
+				db.statusNeqIdx["всё сложно"][k] = true
+			case "всё сложно":
+				db.statusNeqIdx["заняты"][k] = true
+				db.statusNeqIdx["свободны"][k] = true
+			}
 		}
 
 		if _, ok := db.fnameIdx[v.FName]; !ok {
@@ -460,22 +476,25 @@ func (db *DB) CreateIndexes(now int) bool {
 	})
 	db.mu.RUnlock()
 	runtime.GC()
-	//log.Println("indexes size", utils.Sizeof(
-	//	db.sexIdx,
-	//	db.statusIdx,
-	//	db.fnameIdx,
-	//	db.snameIdx,
-	//	db.phoneIdx,
-	//	db.countryIdx,
-	//	db.cityIdx,
-	//	db.emailIdx,
-	//	db.emailDomainIdx,
-	//	db.snamePrefixIdx,
-	//	db.birthIdx,
-	//	db.birthYearIdx,
-	//	db.interestsIdx,
-	//	db.likesIdx,
-	//	db.premiumIdx))
+
+	log.Println("indexes size", utils.Sizeof(
+		db.sexIdx,
+		db.statusIdx,
+		db.fnameIdx,
+		db.snameIdx,
+		db.phoneIdx,
+		db.countryIdx,
+		db.cityIdx,
+		db.emailIdx,
+		db.emailDomainIdx,
+		db.snamePrefixIdx,
+		db.birthIdx,
+		db.birthYearIdx,
+		db.interestsIdx,
+		db.likesIdx,
+		db.premiumIdx))
+
+	log.Println("db size", utils.Sizeof(db.accounts))
 	return true
 }
 
@@ -492,15 +511,7 @@ func (db *DB) Find(query M) models.Accounts {
 			res = append(res, db.statusIdx[v.(string)])
 			projection["status"] = true
 		case "status_neq":
-			r := make(map[int]bool)
-			for ks, vs := range db.statusIdx {
-				if ks != v.(string) {
-					for kr, vr := range vs {
-						r[kr] = vr
-					}
-				}
-			}
-			res = append(res, r)
+			res = append(res, db.statusNeqIdx[v.(string)])
 			projection["status"] = true
 		case "fname_eq":
 			res = append(res, db.fnameIdx[v.(string)])
@@ -647,7 +658,7 @@ func (db *DB) Find(query M) models.Accounts {
 
 			ids := make(map[int]bool)
 		InterestsContainsLoop:
-			for id, _ := range r[0] {
+			for id := range r[0] {
 				for i := 1; i < len(r); i++ {
 					if _, ok := r[i][id]; !ok {
 						continue InterestsContainsLoop
@@ -686,7 +697,7 @@ func (db *DB) Find(query M) models.Accounts {
 
 			ids := make(map[int]bool)
 		LikesContainsLoop:
-			for id, _ := range r[0] {
+			for id := range r[0] {
 				for i := 1; i < len(r); i++ {
 					if _, ok := r[i][id]; !ok {
 						continue LikesContainsLoop
@@ -719,7 +730,7 @@ func (db *DB) Find(query M) models.Accounts {
 			accounts.Accounts = append(accounts.Accounts, db.accounts[db.ids[i]])
 		}
 	} else if len(res) == 1 {
-		for id, _ := range res[0] {
+		for id := range res[0] {
 			ids = append(ids, id)
 		}
 		sort.Slice(ids, func(i, j int) bool {
@@ -739,7 +750,7 @@ func (db *DB) Find(query M) models.Accounts {
 		})
 
 	MinResLoop:
-		for k, _ := range res[0] {
+		for k := range res[0] {
 			for i := 1; i < len(res); i++ {
 				if _, ok := res[i][k]; !ok {
 					continue MinResLoop
@@ -748,7 +759,7 @@ func (db *DB) Find(query M) models.Accounts {
 			idsMap[k] = true
 		}
 
-		for id, _ := range idsMap {
+		for id := range idsMap {
 			ids = append(ids, id)
 		}
 		sort.Slice(ids, func(i, j int) bool {
@@ -763,45 +774,45 @@ func (db *DB) Find(query M) models.Accounts {
 		}
 	}
 
-	for i, _ := range accounts.Accounts {
+	for i := range accounts.Accounts {
 
 		accounts.Accounts[i].Interests = []string{}
 		accounts.Accounts[i].Likes = []models.Like{}
 		accounts.Accounts[i].Joined = 0
 
-		if ok, _ := projection["fname"]; !ok {
+		if _, ok := projection["fname"]; !ok {
 			accounts.Accounts[i].FName = ""
 		}
 
-		if ok, _ := projection["sname"]; !ok {
+		if _, ok := projection["sname"]; !ok {
 			accounts.Accounts[i].SName = ""
 		}
 
-		if ok, _ := projection["phone"]; !ok {
+		if _, ok := projection["phone"]; !ok {
 			accounts.Accounts[i].Phone = ""
 		}
 
-		if ok, _ := projection["sex"]; !ok {
+		if _, ok := projection["sex"]; !ok {
 			accounts.Accounts[i].Sex = ""
 		}
 
-		if ok, _ := projection["birth"]; !ok {
+		if _, ok := projection["birth"]; !ok {
 			accounts.Accounts[i].Birth = 0
 		}
 
-		if ok, _ := projection["country"]; !ok {
+		if _, ok := projection["country"]; !ok {
 			accounts.Accounts[i].Country = ""
 		}
 
-		if ok, _ := projection["city"]; !ok {
+		if _, ok := projection["city"]; !ok {
 			accounts.Accounts[i].City = ""
 		}
 
-		if ok, _ := projection["status"]; !ok {
+		if _, ok := projection["status"]; !ok {
 			accounts.Accounts[i].Status = ""
 		}
 
-		if ok, _ := projection["premium"]; !ok {
+		if _, ok := projection["premium"]; !ok {
 			accounts.Accounts[i].Premium = nil
 		}
 	}
