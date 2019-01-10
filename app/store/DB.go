@@ -746,7 +746,6 @@ func (db *DB) Find(query M) models.Accounts {
 			accountsMin = append(accountsMin, db.accountsMin[id])
 		}
 	} else {
-		idsMap := make(map[int]bool)
 		sort.Slice(res, func(i, j int) bool {
 			return len(res[i]) < len(res[j])
 		})
@@ -758,12 +757,10 @@ func (db *DB) Find(query M) models.Accounts {
 					continue MinResLoop
 				}
 			}
-			idsMap[k] = true
+
+			ids = append(ids, k)
 		}
 
-		for id := range idsMap {
-			ids = append(ids, id)
-		}
 		sort.Slice(ids, func(i, j int) bool {
 			return ids[i] > ids[j]
 		})
