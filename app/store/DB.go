@@ -13,6 +13,7 @@ import (
 
 type minData struct {
 	accountsMin map[int]models.AccountMin
+	emails      map[int]string
 	fnames      map[int]string
 	snames      map[int]string
 	sex         map[byte]string
@@ -25,29 +26,30 @@ type minData struct {
 type DB struct {
 	minData
 	mu                sync.RWMutex
-	accounts          map[int]models.Account
 	ids               []int
-	sexIdx            map[string]map[int]bool
-	statusIdx         map[string]map[int]bool
-	statusNeqIdx      map[string]map[int]bool
-	fnameIdx          map[string]map[int]bool
-	fnameNotNullIdx   map[int]bool
-	snameIdx          map[string]map[int]bool
-	snameNotNullIdx   map[int]bool
-	phoneIdx          map[string]map[int]bool
-	countryIdx        map[string]map[int]bool
-	countryNotNullIdx map[int]bool
-	cityIdx           map[string]map[int]bool
-	cityNotNullIdx    map[int]bool
+	sexIdx            map[string]map[int]void
+	statusIdx         map[string]map[int]void
+	statusNeqIdx      map[string]map[int]void
+	fnameIdx          map[string]map[int]void
+	fnameNotNullIdx   map[int]void
+	snameIdx          map[string]map[int]void
+	snameNotNullIdx   map[int]void
+	phoneCodeIdx      map[string]map[int]void
+	countryIdx        map[string]map[int]void
+	countryNotNullIdx map[int]void
+	cityIdx           map[string]map[int]void
+	cityNotNullIdx    map[int]void
 	emailIdx          []emailIdxEntry
-	emailDomainIdx    map[string]map[int]bool
+	emailDomainIdx    map[string]map[int]void
 	snamePrefixIdx    trieNode
 	birthIdx          []birthIdxEntry
-	birthYearIdx      map[int]map[int]bool
-	interestsIdx      map[string]map[int]bool
-	likesIdx          map[int]map[int]bool
-	premiumIdx        map[string]map[int]bool
+	birthYearIdx      map[int]map[int]void
+	interestsIdx      map[string]map[int]void
+	likesIdx          map[int]map[int]void
+	premiumIdx        map[byte]map[int]void // 0-null, 1-not_null, 2-now
 }
+
+type void struct{}
 
 type M map[string]interface{}
 
@@ -63,36 +65,36 @@ type birthIdxEntry struct {
 
 type trieNode struct {
 	next map[int32]trieNode
-	ids  map[int]bool
+	ids  map[int]void
 }
 
 func NewDB() *DB {
 	return &DB{
-		accounts:          make(map[int]models.Account),
 		ids:               make([]int, 0),
-		sexIdx:            make(map[string]map[int]bool),
-		statusIdx:         make(map[string]map[int]bool),
-		statusNeqIdx:      map[string]map[int]bool{"заняты": {}, "свободны": {}, "всё сложно": {}},
-		fnameIdx:          make(map[string]map[int]bool),
-		fnameNotNullIdx:   make(map[int]bool),
-		snameIdx:          make(map[string]map[int]bool),
-		snameNotNullIdx:   make(map[int]bool),
-		phoneIdx:          make(map[string]map[int]bool),
-		countryIdx:        make(map[string]map[int]bool),
-		countryNotNullIdx: make(map[int]bool),
-		cityIdx:           make(map[string]map[int]bool),
-		cityNotNullIdx:    make(map[int]bool),
-		emailIdx:          make([]emailIdxEntry, 0),
-		emailDomainIdx:    make(map[string]map[int]bool),
-		snamePrefixIdx:    trieNode{next: make(map[int32]trieNode), ids: make(map[int]bool)},
-		birthIdx:          make([]birthIdxEntry, 0),
-		birthYearIdx:      make(map[int]map[int]bool),
-		interestsIdx:      make(map[string]map[int]bool),
-		likesIdx:          make(map[int]map[int]bool),
-		premiumIdx:        make(map[string]map[int]bool),
+		sexIdx:            map[string]map[int]void{},
+		statusIdx:         map[string]map[int]void{},
+		statusNeqIdx:      map[string]map[int]void{"свободны": {}, "заняты": {}, "всё сложно": {}},
+		fnameIdx:          map[string]map[int]void{},
+		fnameNotNullIdx:   map[int]void{},
+		snameIdx:          map[string]map[int]void{},
+		snameNotNullIdx:   map[int]void{},
+		phoneCodeIdx:      map[string]map[int]void{},
+		countryIdx:        map[string]map[int]void{},
+		countryNotNullIdx: map[int]void{},
+		cityIdx:           map[string]map[int]void{},
+		cityNotNullIdx:    map[int]void{},
+		emailIdx:          []emailIdxEntry{},
+		emailDomainIdx:    map[string]map[int]void{},
+		snamePrefixIdx:    trieNode{next: make(map[int32]trieNode), ids: make(map[int]void)},
+		birthIdx:          []birthIdxEntry{},
+		birthYearIdx:      map[int]map[int]void{},
+		interestsIdx:      map[string]map[int]void{},
+		likesIdx:          map[int]map[int]void{},
+		premiumIdx:        map[byte]map[int]void{},
 
 		minData: minData{
 			accountsMin: map[int]models.AccountMin{},
+			emails:      map[int]string{},
 			fnames:      map[int]string{},
 			snames:      map[int]string{},
 			sex:         map[byte]string{0: "m", 1: "f"},
@@ -188,19 +190,19 @@ func (db *DB) getBirthGtIdxEntries(birth int) []birthIdxEntry {
 	return []birthIdxEntry{}
 }
 
-func (db *DB) getSnamePrefixIds(prefix string) map[int]bool {
+func (db *DB) getSnamePrefixIds(prefix string) map[int]void {
 	start := true
 	var currentNode trieNode
 	for _, char := range prefix {
 		if start {
 			if _, ok := db.snamePrefixIdx.next[char]; !ok {
-				return make(map[int]bool)
+				return make(map[int]void)
 			}
 			currentNode = db.snamePrefixIdx.next[char]
 			start = false
 		} else {
 			if _, ok := currentNode.next[char]; !ok {
-				return make(map[int]bool)
+				return make(map[int]void)
 			}
 			currentNode = currentNode.next[char]
 		}
@@ -208,18 +210,21 @@ func (db *DB) getSnamePrefixIds(prefix string) map[int]bool {
 	return currentNode.ids
 }
 
-func (db *DB) LoadData(accounts []models.Account) {
-	db.mu.RLock()
-	for _, account := range accounts {
-		db.accounts[account.ID] = account
-	}
-	db.mu.RUnlock()
-	runtime.GC()
-}
-
 func (db *DB) LoadMinData(accounts []models.Account) {
 	db.mu.RLock()
 	for _, account := range accounts {
+		emailId := len(db.emails)
+		for k, v := range db.emails {
+			if v == account.Email {
+				emailId = k
+				break
+			}
+		}
+
+		if emailId == len(db.emails) {
+			db.emails[emailId] = account.Email
+		}
+
 		fnameId := len(db.fnames)
 		for k, v := range db.fnames {
 			if v == account.FName {
@@ -298,7 +303,7 @@ func (db *DB) LoadMinData(accounts []models.Account) {
 		}
 
 		accountMin := models.AccountMin{
-			Email:     account.Email,
+			Email:     emailId,
 			FName:     fnameId,
 			SName:     snameId,
 			Phone:     account.Phone,
@@ -320,49 +325,46 @@ func (db *DB) LoadMinData(accounts []models.Account) {
 
 func (db *DB) CreateIndexes(now int) bool {
 	db.mu.RLock()
-	for k, v := range db.accounts {
-		if v.Sex != "" {
-			if _, ok := db.sexIdx[v.Sex]; !ok {
-				db.sexIdx[v.Sex] = make(map[int]bool)
-			}
-			db.sexIdx[v.Sex][k] = true
+	for k, v := range db.accountsMin {
+
+		if _, ok := db.sexIdx[db.sex[v.Sex]]; !ok {
+			db.sexIdx[db.sex[v.Sex]] = map[int]void{}
+		}
+		db.sexIdx[db.sex[v.Sex]][k] = void{}
+
+		if _, ok := db.statusIdx[db.status[v.Status]]; !ok {
+			db.statusIdx[db.status[v.Status]] = map[int]void{}
+		}
+		db.statusIdx[db.status[v.Status]][k] = void{}
+
+		switch v.Status {
+		case 0:
+			db.statusNeqIdx[db.status[1]][k] = void{}
+			db.statusNeqIdx[db.status[2]][k] = void{}
+		case 1:
+			db.statusNeqIdx[db.status[0]][k] = void{}
+			db.statusNeqIdx[db.status[2]][k] = void{}
+		case 2:
+			db.statusNeqIdx[db.status[0]][k] = void{}
+			db.statusNeqIdx[db.status[1]][k] = void{}
 		}
 
-		if v.Status != "" {
-			if _, ok := db.statusIdx[v.Status]; !ok {
-				db.statusIdx[v.Status] = make(map[int]bool)
-			}
-			db.statusIdx[v.Status][k] = true
+		if _, ok := db.fnameIdx[db.fnames[v.FName]]; !ok {
+			db.fnameIdx[db.fnames[v.FName]] = map[int]void{}
+		}
+		db.fnameIdx[db.fnames[v.FName]][k] = void{}
 
-			switch v.Status {
-			case "заняты":
-				db.statusNeqIdx["свободны"][k] = true
-				db.statusNeqIdx["всё сложно"][k] = true
-			case "свободны":
-				db.statusNeqIdx["заняты"][k] = true
-				db.statusNeqIdx["всё сложно"][k] = true
-			case "всё сложно":
-				db.statusNeqIdx["заняты"][k] = true
-				db.statusNeqIdx["свободны"][k] = true
-			}
+		if db.fnames[v.FName] != "" {
+			db.fnameNotNullIdx[k] = void{}
 		}
 
-		if _, ok := db.fnameIdx[v.FName]; !ok {
-			db.fnameIdx[v.FName] = make(map[int]bool)
+		if _, ok := db.snameIdx[db.snames[v.SName]]; !ok {
+			db.snameIdx[db.snames[v.SName]] = map[int]void{}
 		}
-		db.fnameIdx[v.FName][k] = true
+		db.snameIdx[db.snames[v.SName]][k] = void{}
 
-		if v.FName != "" {
-			db.fnameNotNullIdx[k] = true
-		}
-
-		if _, ok := db.snameIdx[v.SName]; !ok {
-			db.snameIdx[v.SName] = make(map[int]bool)
-		}
-		db.snameIdx[v.SName][k] = true
-
-		if v.SName != "" {
-			db.snameNotNullIdx[k] = true
+		if db.snames[v.SName] != "" {
+			db.snameNotNullIdx[k] = void{}
 		}
 
 		phoneCode := ""
@@ -371,54 +373,54 @@ func (db *DB) CreateIndexes(now int) bool {
 			s = strings.Split(s[1], ")")
 			phoneCode = s[0]
 		}
-		if _, ok := db.phoneIdx[phoneCode]; !ok {
-			db.phoneIdx[phoneCode] = make(map[int]bool)
+		if _, ok := db.phoneCodeIdx[phoneCode]; !ok {
+			db.phoneCodeIdx[phoneCode] = map[int]void{}
 		}
-		db.phoneIdx[phoneCode][k] = true
+		db.phoneCodeIdx[phoneCode][k] = void{}
 
-		if _, ok := db.countryIdx[v.Country]; !ok {
-			db.countryIdx[v.Country] = make(map[int]bool)
+		if _, ok := db.countryIdx[db.countries[v.Country]]; !ok {
+			db.countryIdx[db.countries[v.Country]] = map[int]void{}
 		}
-		db.countryIdx[v.Country][k] = true
+		db.countryIdx[db.countries[v.Country]][k] = void{}
 
-		if v.Country != "" {
-			db.countryNotNullIdx[k] = true
-		}
-
-		if _, ok := db.cityIdx[v.City]; !ok {
-			db.cityIdx[v.City] = make(map[int]bool)
-		}
-		db.cityIdx[v.City][k] = true
-
-		if v.City != "" {
-			db.cityNotNullIdx[k] = true
+		if db.countries[v.Country] != "" {
+			db.countryNotNullIdx[k] = void{}
 		}
 
-		db.emailIdx = append(db.emailIdx, emailIdxEntry{v.Email, k})
+		if _, ok := db.cityIdx[db.cities[v.City]]; !ok {
+			db.cityIdx[db.cities[v.City]] = map[int]void{}
+		}
+		db.cityIdx[db.cities[v.City]][k] = void{}
 
-		domain := strings.Split(v.Email, "@")[1]
+		if db.cities[v.City] != "" {
+			db.cityNotNullIdx[k] = void{}
+		}
+
+		db.emailIdx = append(db.emailIdx, emailIdxEntry{db.emails[v.Email], k})
+
+		domain := strings.Split(db.emails[v.Email], "@")[1]
 		if _, ok := db.emailDomainIdx[domain]; !ok {
-			db.emailDomainIdx[domain] = make(map[int]bool)
+			db.emailDomainIdx[domain] = map[int]void{}
 		}
-		db.emailDomainIdx[domain][k] = true
+		db.emailDomainIdx[domain][k] = void{}
 
-		if v.SName != "" {
+		if db.snames[v.SName] != "" {
 			start := true
 			var currentNode trieNode
-			for _, char := range v.SName {
+			for _, char := range db.snames[v.SName] {
 				if start {
 					if _, ok := db.snamePrefixIdx.next[char]; !ok {
-						db.snamePrefixIdx.next[char] = trieNode{next: make(map[int32]trieNode), ids: make(map[int]bool)}
+						db.snamePrefixIdx.next[char] = trieNode{next: make(map[int32]trieNode), ids: make(map[int]void)}
 					}
 					currentNode = db.snamePrefixIdx.next[char]
-					currentNode.ids[k] = true
+					currentNode.ids[k] = void{}
 					start = false
 				} else {
 					if _, ok := currentNode.next[char]; !ok {
-						currentNode.next[char] = trieNode{next: make(map[int32]trieNode), ids: make(map[int]bool)}
+						currentNode.next[char] = trieNode{next: make(map[int32]trieNode), ids: make(map[int]void)}
 					}
 					currentNode = currentNode.next[char]
-					currentNode.ids[k] = true
+					currentNode.ids[k] = void{}
 				}
 			}
 		}
@@ -427,39 +429,39 @@ func (db *DB) CreateIndexes(now int) bool {
 
 		year := time.Unix(int64(v.Birth), 0).Year()
 		if _, ok := db.birthYearIdx[year]; !ok {
-			db.birthYearIdx[year] = make(map[int]bool)
+			db.birthYearIdx[year] = map[int]void{}
 		}
-		db.birthYearIdx[year][k] = true
+		db.birthYearIdx[year][k] = void{}
 
 		for _, interest := range v.Interests {
-			if _, ok := db.interestsIdx[interest]; !ok {
-				db.interestsIdx[interest] = make(map[int]bool)
+			if _, ok := db.interestsIdx[db.interests[interest]]; !ok {
+				db.interestsIdx[db.interests[interest]] = map[int]void{}
 			}
-			db.interestsIdx[interest][k] = true
+			db.interestsIdx[db.interests[interest]][k] = void{}
 		}
 
 		for _, like := range v.Likes {
 			if _, ok := db.likesIdx[like.ID]; !ok {
-				db.likesIdx[like.ID] = make(map[int]bool)
+				db.likesIdx[like.ID] = map[int]void{}
 			}
-			db.likesIdx[like.ID][k] = true
+			db.likesIdx[like.ID][k] = void{}
 		}
 
 		if v.Premium == nil {
-			if _, ok := db.premiumIdx["null"]; !ok {
-				db.premiumIdx["null"] = make(map[int]bool)
+			if _, ok := db.premiumIdx[0]; !ok {
+				db.premiumIdx[0] = map[int]void{}
 			}
-			db.premiumIdx["null"][k] = true
+			db.premiumIdx[0][k] = void{}
 		} else {
-			if _, ok := db.premiumIdx["not_null"]; !ok {
-				db.premiumIdx["not_null"] = make(map[int]bool)
+			if _, ok := db.premiumIdx[1]; !ok {
+				db.premiumIdx[1] = map[int]void{}
 			}
-			db.premiumIdx["not_null"][k] = true
+			db.premiumIdx[1][k] = void{}
 			if v.PremiumNow(now) {
-				if _, ok := db.premiumIdx["now"]; !ok {
-					db.premiumIdx["now"] = make(map[int]bool)
+				if _, ok := db.premiumIdx[2]; !ok {
+					db.premiumIdx[2] = map[int]void{}
 				}
-				db.premiumIdx["now"][k] = true
+				db.premiumIdx[2][k] = void{}
 			}
 		}
 
@@ -482,7 +484,7 @@ func (db *DB) CreateIndexes(now int) bool {
 		db.statusIdx,
 		db.fnameIdx,
 		db.snameIdx,
-		db.phoneIdx,
+		db.phoneCodeIdx,
 		db.countryIdx,
 		db.cityIdx,
 		db.emailIdx,
@@ -494,37 +496,37 @@ func (db *DB) CreateIndexes(now int) bool {
 		db.likesIdx,
 		db.premiumIdx))
 
-	log.Println("db size", utils.Sizeof(db.accounts))
+	log.Println("db size", utils.Sizeof(db.accountsMin))
 	return true
 }
 
 func (db *DB) Find(query M) models.Accounts {
 	//log.Println("[DEBUG] query", query)
-	res := make([]map[int]bool, 0)
-	projection := make(map[string]bool)
+	res := make([]map[int]void, 0)
+	projection := make(map[string]void)
 	for k, v := range query {
 		switch k {
 		case "sex_eq":
 			res = append(res, db.sexIdx[v.(string)])
-			projection["sex"] = true
+			projection["sex"] = void{}
 		case "status_eq":
 			res = append(res, db.statusIdx[v.(string)])
-			projection["status"] = true
+			projection["status"] = void{}
 		case "status_neq":
 			res = append(res, db.statusNeqIdx[v.(string)])
-			projection["status"] = true
+			projection["status"] = void{}
 		case "fname_eq":
 			res = append(res, db.fnameIdx[v.(string)])
-			projection["fname"] = true
+			projection["fname"] = void{}
 		case "fname_any":
-			r := make(map[int]bool)
+			r := make(map[int]void)
 			for _, fname := range v.([]string) {
 				for kr, vr := range db.fnameIdx[fname] {
 					r[kr] = vr
 				}
 			}
 			res = append(res, r)
-			projection["fname"] = true
+			projection["fname"] = void{}
 		case "fname_null":
 			switch v.(string) {
 			case "0":
@@ -532,10 +534,10 @@ func (db *DB) Find(query M) models.Accounts {
 			case "1":
 				res = append(res, db.fnameIdx[""])
 			}
-			projection["fname"] = true
+			projection["fname"] = void{}
 		case "sname_eq":
 			res = append(res, db.snameIdx[v.(string)])
-			projection["sname"] = true
+			projection["sname"] = void{}
 		case "sname_null":
 			switch v.(string) {
 			case "0":
@@ -543,12 +545,12 @@ func (db *DB) Find(query M) models.Accounts {
 			case "1":
 				res = append(res, db.snameIdx[""])
 			}
-			projection["sname"] = true
+			projection["sname"] = void{}
 		case "phone_null":
 			switch v.(string) {
 			case "0":
-				r := make(map[int]bool)
-				for kp, vp := range db.phoneIdx {
+				r := make(map[int]void) //todo make phone null idx
+				for kp, vp := range db.phoneCodeIdx {
 					if kp != "" {
 						for kr, vr := range vp {
 							r[kr] = vr
@@ -557,12 +559,12 @@ func (db *DB) Find(query M) models.Accounts {
 				}
 				res = append(res, r)
 			case "1":
-				res = append(res, db.phoneIdx[""])
+				res = append(res, db.phoneCodeIdx[""])
 			}
-			projection["phone"] = true
+			projection["phone"] = void{}
 		case "country_eq":
 			res = append(res, db.countryIdx[v.(string)])
-			projection["country"] = true
+			projection["country"] = void{}
 		case "country_null":
 			switch v.(string) {
 			case "0":
@@ -570,19 +572,19 @@ func (db *DB) Find(query M) models.Accounts {
 			case "1":
 				res = append(res, db.countryIdx[""])
 			}
-			projection["country"] = true
+			projection["country"] = void{}
 		case "city_eq":
 			res = append(res, db.cityIdx[v.(string)])
-			projection["city"] = true
+			projection["city"] = void{}
 		case "city_any":
-			r := make(map[int]bool)
+			r := make(map[int]void)
 			for _, city := range v.([]string) {
 				for kr, vr := range db.cityIdx[city] {
 					r[kr] = vr
 				}
 			}
 			res = append(res, r)
-			projection["city"] = true
+			projection["city"] = void{}
 		case "city_null":
 			switch v.(string) {
 			case "0":
@@ -590,60 +592,60 @@ func (db *DB) Find(query M) models.Accounts {
 			case "1":
 				res = append(res, db.cityIdx[""])
 			}
-			projection["city"] = true
+			projection["city"] = void{}
 		case "email_domain":
 			res = append(res, db.emailDomainIdx[v.(string)])
 		case "email_lt":
 			x := db.getEmailLtIdxEntries(v.(string))
-			ids := make(map[int]bool)
+			ids := make(map[int]void)
 			for _, e := range x {
-				ids[e.id] = true
+				ids[e.id] = void{}
 			}
 			res = append(res, ids)
 		case "email_gt":
 			x := db.getEmailGtIdxEntries(v.(string))
-			ids := make(map[int]bool)
+			ids := make(map[int]void)
 			for _, e := range x {
-				ids[e.id] = true
+				ids[e.id] = void{}
 			}
 			res = append(res, ids)
 		case "sname_starts":
 			res = append(res, db.getSnamePrefixIds(v.(string)))
-			projection["sname"] = true
+			projection["sname"] = void{}
 		case "phone_code":
-			res = append(res, db.phoneIdx[v.(string)])
-			projection["phone"] = true
+			res = append(res, db.phoneCodeIdx[v.(string)])
+			projection["phone"] = void{}
 		case "birth_lt":
 			x := db.getBirthLtIdxEntries(v.(int))
-			ids := make(map[int]bool)
+			ids := make(map[int]void)
 			for _, e := range x {
-				ids[e.id] = true
+				ids[e.id] = void{}
 			}
 			res = append(res, ids)
-			projection["birth"] = true
+			projection["birth"] = void{}
 		case "birth_gt":
 			x := db.getBirthGtIdxEntries(v.(int))
-			ids := make(map[int]bool)
+			ids := make(map[int]void)
 			for _, e := range x {
-				ids[e.id] = true
+				ids[e.id] = void{}
 			}
 			res = append(res, ids)
-			projection["birth"] = true
+			projection["birth"] = void{}
 		case "birth_year":
 			b, ok := db.birthYearIdx[v.(int)]
 			if !ok {
-				b = make(map[int]bool)
+				b = make(map[int]void)
 			}
 			res = append(res, b)
-			projection["birth"] = true
+			projection["birth"] = void{}
 		case "interests_contains":
-			r := make([]map[int]bool, 0)
+			r := make([]map[int]void, 0)
 			for _, interest := range v.([]string) {
 				r = append(r, db.interestsIdx[interest])
 			}
 
 			if len(r) == 0 {
-				res = append(res, make(map[int]bool))
+				res = append(res, make(map[int]void))
 				break
 			}
 
@@ -656,7 +658,7 @@ func (db *DB) Find(query M) models.Accounts {
 				return len(r[i]) < len(r[j])
 			})
 
-			ids := make(map[int]bool)
+			ids := make(map[int]void)
 		InterestsContainsLoop:
 			for id := range r[0] {
 				for i := 1; i < len(r); i++ {
@@ -664,11 +666,11 @@ func (db *DB) Find(query M) models.Accounts {
 						continue InterestsContainsLoop
 					}
 				}
-				ids[id] = true
+				ids[id] = void{}
 			}
 			res = append(res, ids)
 		case "interests_any":
-			ids := make(map[int]bool)
+			ids := make(map[int]void)
 			for _, interest := range v.([]string) {
 				for ki, vi := range db.interestsIdx[interest] {
 					ids[ki] = vi
@@ -676,13 +678,13 @@ func (db *DB) Find(query M) models.Accounts {
 			}
 			res = append(res, ids)
 		case "likes_contains":
-			r := make([]map[int]bool, 0)
+			r := make([]map[int]void, 0)
 			for _, like := range v.([]int) {
 				r = append(r, db.likesIdx[like])
 			}
 
 			if len(r) == 0 {
-				res = append(res, make(map[int]bool))
+				res = append(res, make(map[int]void))
 				break
 			}
 
@@ -695,7 +697,7 @@ func (db *DB) Find(query M) models.Accounts {
 				return len(r[i]) < len(r[j])
 			})
 
-			ids := make(map[int]bool)
+			ids := make(map[int]void)
 		LikesContainsLoop:
 			for id := range r[0] {
 				for i := 1; i < len(r); i++ {
@@ -703,31 +705,31 @@ func (db *DB) Find(query M) models.Accounts {
 						continue LikesContainsLoop
 					}
 				}
-				ids[id] = true
+				ids[id] = void{}
 			}
 			res = append(res, ids)
 		case "premium_now":
-			res = append(res, db.premiumIdx["now"])
-			projection["premium"] = true
+			res = append(res, db.premiumIdx[2])
+			projection["premium"] = void{}
 		case "premium_null":
 			switch v.(string) {
 			case "0":
-				res = append(res, db.premiumIdx["not_null"])
+				res = append(res, db.premiumIdx[1])
 			case "1":
-				res = append(res, db.premiumIdx["null"])
+				res = append(res, db.premiumIdx[0])
 			}
-			projection["premium"] = true
+			projection["premium"] = void{}
 		}
 	}
 
 	limit := query["limit"].(int)
 	ids := make([]int, 0)
-	accounts := models.Accounts{}
-	accounts.Accounts = make([]models.Account, 0)
+	accountsMin := make([]models.AccountMin, 0)
 
 	if len(res) == 0 {
 		for i := 0; i < limit; i++ {
-			accounts.Accounts = append(accounts.Accounts, db.accounts[db.ids[i]])
+			ids = append(ids, db.ids[i])
+			accountsMin = append(accountsMin, db.accountsMin[db.ids[i]])
 		}
 	} else if len(res) == 1 {
 		for id := range res[0] {
@@ -741,7 +743,7 @@ func (db *DB) Find(query M) models.Accounts {
 			ids = ids[:limit]
 		}
 		for _, id := range ids {
-			accounts.Accounts = append(accounts.Accounts, db.accounts[id])
+			accountsMin = append(accountsMin, db.accountsMin[id])
 		}
 	} else {
 		idsMap := make(map[int]bool)
@@ -770,51 +772,52 @@ func (db *DB) Find(query M) models.Accounts {
 			ids = ids[:limit]
 		}
 		for _, id := range ids {
-			accounts.Accounts = append(accounts.Accounts, db.accounts[id])
+			accountsMin = append(accountsMin, db.accountsMin[id])
 		}
 	}
 
-	for i := range accounts.Accounts {
+	accounts := models.Accounts{}
+	accounts.Accounts = make([]models.Account, 0)
+	for i, accountMin := range accountsMin {
+		account := models.Account{ID: ids[i], Email: db.emails[accountMin.Email]}
 
-		accounts.Accounts[i].Interests = []string{}
-		accounts.Accounts[i].Likes = []models.Like{}
-		accounts.Accounts[i].Joined = 0
-
-		if _, ok := projection["fname"]; !ok {
-			accounts.Accounts[i].FName = ""
+		if _, ok := projection["fname"]; ok {
+			account.FName = db.fnames[accountMin.FName]
 		}
 
-		if _, ok := projection["sname"]; !ok {
-			accounts.Accounts[i].SName = ""
+		if _, ok := projection["sname"]; ok {
+			account.SName = db.snames[accountMin.SName]
 		}
 
-		if _, ok := projection["phone"]; !ok {
-			accounts.Accounts[i].Phone = ""
+		if _, ok := projection["phone"]; ok {
+			account.Phone = accountMin.Phone
 		}
 
-		if _, ok := projection["sex"]; !ok {
-			accounts.Accounts[i].Sex = ""
+		if _, ok := projection["sex"]; ok {
+			account.Sex = db.sex[accountMin.Sex]
 		}
 
-		if _, ok := projection["birth"]; !ok {
-			accounts.Accounts[i].Birth = 0
+		if _, ok := projection["birth"]; ok {
+			account.Birth = accountMin.Birth
 		}
 
-		if _, ok := projection["country"]; !ok {
-			accounts.Accounts[i].Country = ""
+		if _, ok := projection["country"]; ok {
+			account.Country = db.countries[accountMin.Country]
 		}
 
-		if _, ok := projection["city"]; !ok {
-			accounts.Accounts[i].City = ""
+		if _, ok := projection["city"]; ok {
+			account.City = db.cities[accountMin.City]
 		}
 
-		if _, ok := projection["status"]; !ok {
-			accounts.Accounts[i].Status = ""
+		if _, ok := projection["status"]; ok {
+			account.Status = db.status[accountMin.Status]
 		}
 
-		if _, ok := projection["premium"]; !ok {
-			accounts.Accounts[i].Premium = nil
+		if _, ok := projection["premium"]; ok {
+			account.Premium = accountMin.Premium
 		}
+
+		accounts.Accounts = append(accounts.Accounts, account)
 	}
 
 	return accounts

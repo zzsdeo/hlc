@@ -1,7 +1,7 @@
 package models
 
 type AccountMin struct {
-	Email     string //up to 100 symbols, unique
+	Email     int    //up to 100 symbols, unique
 	FName     int    //up to 50 symbols, optional
 	SName     int    //up to 50 symbols, optional
 	Phone     string //up to 16 symbols, unique, optional
@@ -14,4 +14,14 @@ type AccountMin struct {
 	Interests []int  //every string is up to 100 symbols, optional
 	Premium   *Premium
 	Likes     []Like
+}
+
+func (a *AccountMin) PremiumNow(now int) bool {
+	if a.Premium == nil {
+		return false
+	}
+	if a.Premium.Start < now && a.Premium.Finish > now {
+		return true
+	}
+	return false
 }

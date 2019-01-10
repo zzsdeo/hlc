@@ -102,8 +102,7 @@ func (a *App) Initialize(now int) {
 }
 
 func (a *App) LoadData(accounts []models.Account) {
-	a.db.LoadData(accounts)
-	//a.db.LoadMinData(accounts)
+	a.db.LoadMinData(accounts)
 	log.Println("[INFO] added ", len(accounts), " accounts")
 }
 
