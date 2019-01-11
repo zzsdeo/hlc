@@ -62,7 +62,7 @@ type birthIdxEntry struct {
 
 type trieNode struct {
 	next map[int32]trieNode
-	ids  []int
+	ids  *[]int
 }
 
 func NewDB() *DB {
@@ -85,7 +85,7 @@ func NewDB() *DB {
 		cityNotNullIdx:    []int{},
 		emailIdx:          []emailIdxEntry{},
 		emailDomainIdx:    map[string][]int{},
-		snamePrefixIdx:    trieNode{next: map[int32]trieNode{}, ids: []int{}},
+		snamePrefixIdx:    trieNode{next: map[int32]trieNode{}, ids: &[]int{}},
 		birthIdx:          []birthIdxEntry{},
 		birthYearIdx:      map[int][]int{},
 		interestsIdx:      map[string][]int{},
@@ -116,6 +116,7 @@ func (db *DB) getEmailLtIdxEntries(prefix string) []int {
 			for _, e := range db.emailIdx[:mid+1] {
 				result = append(result, e.id)
 			}
+			sort.Ints(result)
 			return result
 		}
 
@@ -141,6 +142,7 @@ func (db *DB) getEmailGtIdxEntries(prefix string) []int {
 			for _, e := range db.emailIdx[mid:] {
 				result = append(result, e.id)
 			}
+			sort.Ints(result)
 			return result
 		}
 
@@ -166,6 +168,7 @@ func (db *DB) getBirthLtIdxEntries(birth int) []int {
 			for _, e := range db.birthIdx[:mid+1] {
 				result = append(result, e.id)
 			}
+			sort.Ints(result)
 			return result
 		}
 
@@ -191,6 +194,7 @@ func (db *DB) getBirthGtIdxEntries(birth int) []int {
 			for _, e := range db.birthIdx[mid:] {
 				result = append(result, e.id)
 			}
+			sort.Ints(result)
 			return result
 		}
 
@@ -200,7 +204,6 @@ func (db *DB) getBirthGtIdxEntries(birth int) []int {
 			low = mid + 1
 		}
 	}
-
 	return result
 }
 
@@ -221,8 +224,8 @@ func (db *DB) getSnamePrefixIds(prefix string) []int {
 			currentNode = currentNode.next[char]
 		}
 	}
-	sort.Ints(currentNode.ids)
-	return currentNode.ids
+	sort.Ints(*currentNode.ids)
+	return *currentNode.ids
 }
 
 func (db *DB) LoadMinData(accounts []models.Account) {
@@ -395,19 +398,18 @@ func (db *DB) CreateIndexes(now int) bool {
 			for _, char := range db.snames[v.SName] {
 				if start {
 					if _, ok := db.snamePrefixIdx.next[char]; !ok {
-						db.snamePrefixIdx.next[char] = trieNode{next: make(map[int32]trieNode), ids: []int{}}
+						db.snamePrefixIdx.next[char] = trieNode{next: make(map[int32]trieNode), ids: &[]int{}}
 					}
 					currentNode = db.snamePrefixIdx.next[char]
-					currentNode.ids = append(currentNode.ids, k)
+					*currentNode.ids = append(*currentNode.ids, k)
 					start = false
 				} else {
 					if _, ok := currentNode.next[char]; !ok {
-						currentNode.next[char] = trieNode{next: make(map[int32]trieNode), ids: []int{}}
+						currentNode.next[char] = trieNode{next: make(map[int32]trieNode), ids: &[]int{}}
 					}
 					currentNode = currentNode.next[char]
-					currentNode.ids = append(currentNode.ids, k)
+					*currentNode.ids = append(*currentNode.ids, k)
 				}
-
 			}
 		}
 
@@ -545,6 +547,7 @@ func (db *DB) CreateIndexes(now int) bool {
 		db.premiumIdx))
 
 	log.Println("db size", utils.Sizeof(db.accountsMin))
+
 	return true
 }
 
@@ -567,9 +570,13 @@ func (db *DB) Find(query M) models.Accounts {
 			res = append(res, db.fnameIdx[v.(string)])
 			projection["fname"] = void{}
 		case "fname_any":
-			for _, fname := range v.([]string) {
-				res = append(res, db.fnameIdx[fname])
+			r := db.fnameIdx[v.([]string)[0]]
+			if len(v.([]string)) > 1 {
+				for i := 1; i < len(v.([]string)); i++ {
+					r = sumSlicesUnique(r, db.fnameIdx[v.([]string)[i]])
+				}
 			}
+			res = append(res, r)
 			projection["fname"] = void{}
 		case "fname_null":
 			switch v.(string) {
@@ -594,11 +601,13 @@ func (db *DB) Find(query M) models.Accounts {
 			switch v.(string) {
 			case "0":
 				//todo make phone null idx
+				r := make([]int, 0)
 				for kp, vp := range db.phoneCodeIdx {
 					if kp != "" {
-						res = append(res, vp)
+						r = sumSlicesUnique(r, vp)
 					}
 				}
+				res = append(res, r)
 			case "1":
 				res = append(res, db.phoneCodeIdx[""])
 			}
@@ -618,9 +627,13 @@ func (db *DB) Find(query M) models.Accounts {
 			res = append(res, db.cityIdx[v.(string)])
 			projection["city"] = void{}
 		case "city_any":
-			for _, city := range v.([]string) {
-				res = append(res, db.cityIdx[city])
+			r := db.cityIdx[v.([]string)[0]]
+			if len(v.([]string)) > 1 {
+				for i := 1; i < len(v.([]string)); i++ {
+					r = sumSlicesUnique(r, db.cityIdx[v.([]string)[i]])
+				}
 			}
+			res = append(res, r)
 			projection["city"] = void{}
 		case "city_null":
 			switch v.(string) {
@@ -651,6 +664,8 @@ func (db *DB) Find(query M) models.Accounts {
 		case "birth_year":
 			if b, ok := db.birthYearIdx[v.(int)]; ok {
 				res = append(res, b)
+			} else {
+				res = append(res, []int{})
 			}
 			projection["birth"] = void{}
 		case "interests_contains":
@@ -660,6 +675,7 @@ func (db *DB) Find(query M) models.Accounts {
 			}
 
 			if len(r) == 0 {
+				res = append(res, []int{})
 				break
 			}
 
@@ -672,9 +688,9 @@ func (db *DB) Find(query M) models.Accounts {
 				return len(r[i]) < len(r[j])
 			})
 
-			ids := []int{}
-		InterestsContainsLoop:
-			for id := range r[0] {
+			var ids []int
+		InterestsContainsLoop: //todo https://habr.com/post/250191/
+			for _, id := range r[0] {
 				for i := 1; i < len(r); i++ {
 					if !intBinarySearch(r[i], id) {
 						continue InterestsContainsLoop
@@ -684,9 +700,13 @@ func (db *DB) Find(query M) models.Accounts {
 			}
 			res = append(res, ids)
 		case "interests_any":
-			for _, interest := range v.([]string) {
-				res = append(res, db.interestsIdx[interest])
+			r := db.interestsIdx[v.([]string)[0]]
+			if len(v.([]string)) > 1 {
+				for i := 1; i < len(v.([]string)); i++ {
+					r = sumSlicesUnique(r, db.interestsIdx[v.([]string)[i]])
+				}
 			}
+			res = append(res, r)
 		case "likes_contains":
 			r := make([][]int, 0)
 			for _, like := range v.([]int) {
@@ -694,6 +714,7 @@ func (db *DB) Find(query M) models.Accounts {
 			}
 
 			if len(r) == 0 {
+				res = append(res, []int{})
 				break
 			}
 
@@ -706,9 +727,9 @@ func (db *DB) Find(query M) models.Accounts {
 				return len(r[i]) < len(r[j])
 			})
 
-			ids := []int{}
-		LikesContainsLoop:
-			for id := range r[0] {
+			var ids []int
+		LikesContainsLoop: //todo https://habr.com/post/250191/
+			for _, id := range r[0] {
 				for i := 1; i < len(r); i++ {
 					if !intBinarySearch(r[i], id) {
 						continue LikesContainsLoop
@@ -732,35 +753,32 @@ func (db *DB) Find(query M) models.Accounts {
 	}
 
 	limit := query["limit"].(int)
-	ids := []int{}
+	var ids []int
 	accountsMin := make([]models.AccountMin, 0)
 
 	if len(res) == 0 {
-		for i := len(db.ids) - 1; i <= limit; i-- {
+		for i := len(db.ids) - 1; i >= len(db.ids)-limit; i-- {
 			ids = append(ids, db.ids[i])
 			accountsMin = append(accountsMin, db.accountsMin[db.ids[i]])
 		}
 	} else if len(res) == 1 {
-		for id := range res[0] {
+		for _, id := range res[0] {
 			ids = append(ids, id)
 		}
-		//sort.Slice(ids, func(i, j int) bool {
-		//	return ids[i] > ids[j]
-		//})
+		sort.Slice(ids, func(i, j int) bool {
+			return ids[i] > ids[j]
+		})
 
-		if len(ids) > limit {
-			ids = ids[limit:]
-		}
-		for _, id := range ids { //todo
-			accountsMin = append(accountsMin, db.accountsMin[id])
+		for i := 0; i < limit && i < len(ids); i++ {
+			accountsMin = append(accountsMin, db.accountsMin[ids[i]])
 		}
 	} else {
 		sort.Slice(res, func(i, j int) bool {
 			return len(res[i]) < len(res[j])
 		})
 
-	MinResLoop:
-		for k := range res[0] {
+	MinResLoop: //todo https://habr.com/post/250191/
+		for _, k := range res[0] {
 			for i := 1; i < len(res); i++ {
 				if !intBinarySearch(res[i], k) {
 					continue MinResLoop
@@ -773,11 +791,8 @@ func (db *DB) Find(query M) models.Accounts {
 			return ids[i] > ids[j]
 		})
 
-		if len(ids) > limit {
-			ids = ids[:limit]
-		}
-		for _, id := range ids {
-			accountsMin = append(accountsMin, db.accountsMin[id])
+		for i := 0; i < limit && i < len(ids); i++ {
+			accountsMin = append(accountsMin, db.accountsMin[ids[i]])
 		}
 	}
 
@@ -847,4 +862,55 @@ func intBinarySearch(slice []int, element int) bool {
 	}
 
 	return false
+}
+
+func sumSlicesUnique(slice1, slice2 []int) []int {
+	n := len(slice1)
+	m := len(slice2)
+	var i, j, k int
+	result := make([]int, m+n)
+	for (i < n) && (j < m) {
+		if slice1[i] == slice2[j] {
+			result[k] = slice1[i]
+			k++
+			i++
+			j++
+		} else if slice1[i] < slice2[j] {
+			result[k] = slice1[i]
+			k++
+			i++
+		} else {
+			result[k] = slice2[j]
+			k++
+			j++
+		}
+	}
+
+	for i < n {
+		result[k] = slice1[i]
+		k++
+		i++
+	}
+	for j < m {
+		result[k] = slice2[j]
+		k++
+		j++
+	}
+
+	return result[:k]
+}
+
+func deduplicate(slice []int) []int {
+	j := 0
+	for i := 1; i < len(slice); i++ {
+		if slice[j] == slice[i] {
+			continue
+		}
+		j++
+		// preserve the original data
+		// in[i], in[j] = in[j], in[i]
+		// only set what is required
+		slice[j] = slice[i]
+	}
+	return slice[:j+1]
 }
