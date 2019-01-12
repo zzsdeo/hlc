@@ -4,7 +4,6 @@ import (
 	"hlc/app/models"
 	"hlc/app/utils"
 	"log"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -13,7 +12,6 @@ import (
 
 type minData struct {
 	accountsMin map[int]models.AccountMin
-	emails      map[int]string
 	fnames      map[int]string
 	snames      map[int]string
 	sex         map[byte]string
@@ -25,7 +23,7 @@ type minData struct {
 
 type DB struct {
 	minData
-	mu                sync.RWMutex
+	mu                *sync.RWMutex
 	ids               []int
 	sexIdx            map[string]map[int]void
 	statusIdx         map[string]map[int]void
@@ -70,6 +68,7 @@ type trieNode struct {
 
 func NewDB() *DB {
 	return &DB{
+		mu:                &sync.RWMutex{},
 		ids:               make([]int, 0),
 		sexIdx:            map[string]map[int]void{},
 		statusIdx:         map[string]map[int]void{},
@@ -94,7 +93,6 @@ func NewDB() *DB {
 
 		minData: minData{
 			accountsMin: map[int]models.AccountMin{},
-			emails:      map[int]string{},
 			fnames:      map[int]string{},
 			snames:      map[int]string{},
 			sex:         map[byte]string{0: "m", 1: "f"},
@@ -213,18 +211,6 @@ func (db *DB) getSnamePrefixIds(prefix string) map[int]void {
 func (db *DB) LoadMinData(accounts []models.Account) {
 	db.mu.RLock()
 	for _, account := range accounts {
-		emailId := len(db.emails)
-		for k, v := range db.emails {
-			if v == account.Email {
-				emailId = k
-				break
-			}
-		}
-
-		if emailId == len(db.emails) {
-			db.emails[emailId] = account.Email
-		}
-
 		fnameId := len(db.fnames)
 		for k, v := range db.fnames {
 			if v == account.FName {
@@ -303,7 +289,7 @@ func (db *DB) LoadMinData(accounts []models.Account) {
 		}
 
 		accountMin := models.AccountMin{
-			Email:     emailId,
+			Email:     account.Email,
 			FName:     fnameId,
 			SName:     snameId,
 			Phone:     account.Phone,
@@ -320,7 +306,7 @@ func (db *DB) LoadMinData(accounts []models.Account) {
 		db.accountsMin[account.ID] = accountMin
 	}
 	db.mu.RUnlock()
-	runtime.GC()
+	//runtime.GC()
 }
 
 func (db *DB) CreateIndexes(now int) bool {
@@ -396,9 +382,9 @@ func (db *DB) CreateIndexes(now int) bool {
 			db.cityNotNullIdx[k] = void{}
 		}
 
-		db.emailIdx = append(db.emailIdx, emailIdxEntry{db.emails[v.Email], k})
+		db.emailIdx = append(db.emailIdx, emailIdxEntry{v.Email, k})
 
-		domain := strings.Split(db.emails[v.Email], "@")[1]
+		domain := strings.Split(v.Email, "@")[1]
 		if _, ok := db.emailDomainIdx[domain]; !ok {
 			db.emailDomainIdx[domain] = map[int]void{}
 		}
@@ -477,7 +463,7 @@ func (db *DB) CreateIndexes(now int) bool {
 		return db.ids[i] > db.ids[j]
 	})
 	db.mu.RUnlock()
-	runtime.GC()
+	//runtime.GC()
 
 	log.Println("indexes size", utils.Sizeof(
 		db.sexIdx,
@@ -776,7 +762,7 @@ func (db *DB) Find(query M) models.Accounts {
 	accounts := models.Accounts{}
 	accounts.Accounts = make([]models.Account, 0)
 	for i, accountMin := range accountsMin {
-		account := models.Account{ID: ids[i], Email: db.emails[accountMin.Email]}
+		account := models.Account{ID: ids[i], Email: accountMin.Email}
 
 		if _, ok := projection["fname"]; ok {
 			account.FName = db.fnames[accountMin.FName]

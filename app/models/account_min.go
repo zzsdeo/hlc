@@ -1,7 +1,7 @@
 package models
 
 type AccountMin struct {
-	Email     int    //up to 100 symbols, unique
+	Email     string //up to 100 symbols, unique
 	FName     int    //up to 50 symbols, optional
 	SName     int    //up to 50 symbols, optional
 	Phone     string //up to 16 symbols, unique, optional
