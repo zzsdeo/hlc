@@ -4,6 +4,7 @@ import (
 	"hlc/app/models"
 	"hlc/app/utils"
 	"log"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -211,65 +212,68 @@ func (db *DB) getSnamePrefixIds(prefix string) map[int]void {
 func (db *DB) LoadMinData(accounts []models.Account) {
 	db.mu.RLock()
 	for _, account := range accounts {
-		fnameId := len(db.fnames)
+		accountMin := models.AccountMin{
+			Email:   account.Email,
+			Phone:   account.Phone,
+			Birth:   account.Birth,
+			Joined:  account.Joined,
+			Premium: account.Premium,
+			Likes:   account.Likes,
+		}
+
+		accountMin.FName = len(db.fnames)
 		for k, v := range db.fnames {
 			if v == account.FName {
-				fnameId = k
+				accountMin.FName = k
 				break
 			}
 		}
-
-		if fnameId == len(db.fnames) {
-			db.fnames[fnameId] = account.FName
+		if accountMin.FName == len(db.fnames) {
+			db.fnames[accountMin.FName] = account.FName
 		}
 
-		snameId := len(db.snames)
+		accountMin.SName = len(db.snames)
 		for k, v := range db.snames {
 			if v == account.SName {
-				snameId = k
+				accountMin.SName = k
 				break
 			}
 		}
-
-		if snameId == len(db.snames) {
-			db.snames[snameId] = account.SName
+		if accountMin.SName == len(db.snames) {
+			db.snames[accountMin.SName] = account.SName
 		}
 
-		var sex byte = 0
 		if account.Sex == "f" {
-			sex = 1
+			accountMin.Sex = 1
 		}
 
-		countryId := len(db.countries)
+		accountMin.Country = len(db.countries)
 		for k, v := range db.countries {
 			if v == account.Country {
-				countryId = k
+				accountMin.Country = k
 				break
 			}
 		}
-
-		if countryId == len(db.countries) {
-			db.countries[countryId] = account.Country
+		if accountMin.Country == len(db.countries) {
+			db.countries[accountMin.Country] = account.Country
 		}
 
-		cityId := len(db.cities)
+		accountMin.City = len(db.cities)
 		for k, v := range db.cities {
 			if v == account.City {
-				cityId = k
+				accountMin.City = k
 				break
 			}
 		}
-
-		if cityId == len(db.cities) {
-			db.cities[cityId] = account.City
+		if accountMin.City == len(db.cities) {
+			db.cities[accountMin.City] = account.City
 		}
 
-		var status byte = 0
 		switch account.Status {
 		case "заняты":
-			status = 1
+			accountMin.Status = 1
 		case "всё сложно":
-			status = 2
+			accountMin.Status = 2
 		}
 
 		var interests []int
@@ -287,26 +291,12 @@ func (db *DB) LoadMinData(accounts []models.Account) {
 			}
 			interests = append(interests, interestId)
 		}
+		accountMin.Interests = interests
 
-		accountMin := models.AccountMin{
-			Email:     account.Email,
-			FName:     fnameId,
-			SName:     snameId,
-			Phone:     account.Phone,
-			Sex:       sex,
-			Birth:     account.Birth,
-			Country:   countryId,
-			City:      cityId,
-			Joined:    account.Joined,
-			Status:    status,
-			Interests: interests,
-			Premium:   account.Premium,
-			Likes:     account.Likes,
-		}
 		db.accountsMin[account.ID] = accountMin
 	}
 	db.mu.RUnlock()
-	//runtime.GC()
+	runtime.GC()
 }
 
 func (db *DB) CreateIndexes(now int) bool {
@@ -463,7 +453,7 @@ func (db *DB) CreateIndexes(now int) bool {
 		return db.ids[i] > db.ids[j]
 	})
 	db.mu.RUnlock()
-	//runtime.GC()
+	runtime.GC()
 
 	log.Println("indexes size", utils.Sizeof(
 		db.sexIdx,
