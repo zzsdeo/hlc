@@ -392,7 +392,7 @@ func (db *DB) CreateIndexes(now int) bool {
 		}
 		db.emailDomainIdx[domain] = append(db.emailDomainIdx[domain], k)
 
-		if db.snames[v.SName] != "" {
+		if db.snames[v.SName] != "" { //todo https://github.com/plar/go-adaptive-radix-tree
 			start := true
 			var currentNode trieNode
 			for _, char := range db.snames[v.SName] {
@@ -684,19 +684,9 @@ func (db *DB) Find(query M) models.Accounts {
 				break
 			}
 
-			sort.Slice(r, func(i, j int) bool {
-				return len(r[i]) < len(r[j])
-			})
-
-			var ids []int
-		InterestsContainsLoop: //todo https://habr.com/post/250191/
-			for _, id := range r[0] {
-				for i := 1; i < len(r); i++ {
-					if !intBinarySearch(r[i], id) {
-						continue InterestsContainsLoop
-					}
-				}
-				ids = append(ids, id)
+			ids := r[0]
+			for i := 1; i < len(r); i++ {
+				ids = sliceIntersection(ids, r[i])
 			}
 			res = append(res, ids)
 		case "interests_any":
@@ -723,19 +713,9 @@ func (db *DB) Find(query M) models.Accounts {
 				break
 			}
 
-			sort.Slice(r, func(i, j int) bool {
-				return len(r[i]) < len(r[j])
-			})
-
-			var ids []int
-		LikesContainsLoop: //todo https://habr.com/post/250191/
-			for _, id := range r[0] {
-				for i := 1; i < len(r); i++ {
-					if !intBinarySearch(r[i], id) {
-						continue LikesContainsLoop
-					}
-				}
-				ids = append(ids, id)
+			ids := r[0]
+			for i := 1; i < len(r); i++ {
+				ids = sliceIntersection(ids, r[i])
 			}
 			res = append(res, ids)
 		case "premium_now":
@@ -773,18 +753,10 @@ func (db *DB) Find(query M) models.Accounts {
 			accountsMin = append(accountsMin, db.accountsMin[ids[i]])
 		}
 	} else {
-		sort.Slice(res, func(i, j int) bool {
-			return len(res[i]) < len(res[j])
-		})
 
-	MinResLoop: //todo https://habr.com/post/250191/
-		for _, k := range res[0] {
-			for i := 1; i < len(res); i++ {
-				if !intBinarySearch(res[i], k) {
-					continue MinResLoop
-				}
-			}
-			ids = append(ids, k)
+		ids = res[0]
+		for i := 1; i < len(res); i++ {
+			ids = sliceIntersection(ids, res[i])
 		}
 
 		sort.Slice(ids, func(i, j int) bool {
@@ -897,6 +869,28 @@ func sumSlicesUnique(slice1, slice2 []int) []int {
 		j++
 	}
 
+	return result[:k]
+}
+
+func sliceIntersection(slice1, slice2 []int) []int {
+	n := len(slice1)
+	m := len(slice2)
+	var i, j, k int
+	result := make([]int, m+n)
+	for (i < n) && (j < m) {
+		if slice1[i] == slice2[j] {
+			result[k] = slice1[i]
+			k++
+			i++
+			j++
+		} else {
+			if slice1[i] < slice2[j] {
+				i++
+			} else {
+				j++
+			}
+		}
+	}
 	return result[:k]
 }
 
