@@ -480,6 +480,7 @@ func (db *DB) Find(query M) models.Accounts {
 	//log.Println("[DEBUG] query", query)
 	res := make([]map[int]void, 0)
 	projection := make(map[string]void)
+	var emailIdxEntries []emailIdxEntry
 	for k, v := range query {
 		switch k {
 		case "sex_eq":
@@ -572,19 +573,22 @@ func (db *DB) Find(query M) models.Accounts {
 		case "email_domain":
 			res = append(res, db.emailDomainIdx[v.(string)])
 		case "email_lt":
-			x := db.getEmailLtIdxEntries(v.(string))
-			ids := make(map[int]void)
-			for _, e := range x {
-				ids[e.id] = void{}
-			}
-			res = append(res, ids)
+			emailIdxEntries = db.getEmailLtIdxEntries(v.(string))
+			res = append(res, map[int]void{-1: {}})
+			//x := db.getEmailLtIdxEntries(v.(string))
+			//ids := make(map[int]void)
+			//for _, e := range x {
+			//	ids[e.id] = void{}
+			//}
+			//res = append(res, ids)
 		case "email_gt":
-			x := db.getEmailGtIdxEntries(v.(string))
-			ids := make(map[int]void)
-			for _, e := range x {
-				ids[e.id] = void{}
-			}
-			res = append(res, ids)
+			emailIdxEntries = db.getEmailGtIdxEntries(v.(string))
+			res = append(res, map[int]void{-1: {}})
+			//ids := make(map[int]void)
+			//for _, e := range x {
+			//	ids[e.id] = void{}
+			//}
+			//res = append(res, ids)
 		case "sname_starts":
 			res = append(res, db.getSnamePrefixIds(v.(string)))
 			projection["sname"] = void{}
@@ -708,9 +712,21 @@ func (db *DB) Find(query M) models.Accounts {
 			accountsMin = append(accountsMin, db.accountsMin[db.ids[i]])
 		}
 	} else if len(res) == 1 {
+		isEmailIdx := false
 		for id := range res[0] {
+			if id == -1 {
+				isEmailIdx = true
+				break
+			}
 			ids = append(ids, id)
 		}
+
+		if isEmailIdx {
+			for _, e := range emailIdxEntries {
+				ids = append(ids, e.id)
+			}
+		}
+
 		sort.Slice(ids, func(i, j int) bool {
 			return ids[i] > ids[j]
 		})
@@ -721,22 +737,55 @@ func (db *DB) Find(query M) models.Accounts {
 		for _, id := range ids {
 			accountsMin = append(accountsMin, db.accountsMin[id])
 		}
+
 	} else {
 		sort.Slice(res, func(i, j int) bool {
-			return len(res[i]) < len(res[j])
+			lengthI := len(res[i])
+			lengthJ := len(res[j])
+			if _, ok := res[i][-1]; ok {
+				lengthI = len(emailIdxEntries)
+			}
+			if _, ok := res[j][-1]; ok {
+				lengthJ = len(emailIdxEntries)
+			}
+			return lengthI < lengthJ
 		})
 
-	MinResLoop:
-		for k := range res[0] {
-			for i := 1; i < len(res); i++ {
-				if _, ok := res[i][k]; !ok {
-					continue MinResLoop
+		if _, ok := res[0][-1]; ok {
+		MinResEmailLoop:
+			for _, e := range emailIdxEntries {
+				for i := 1; i < len(res); i++ {
+					if _, ok := res[i][e.id]; !ok {
+						continue MinResEmailLoop
+					}
 				}
+
+				ids = append(ids, e.id)
 			}
-
-			ids = append(ids, k)
+		} else {
+			sorted := false
+		MinResLoop:
+			for k := range res[0] {
+				for i := 1; i < len(res); i++ {
+					if _, ok := res[i][-1]; ok {
+						if !sorted {
+							sort.Slice(emailIdxEntries, func(i, j int) bool {
+								return emailIdxEntries[i].id < emailIdxEntries[j].id
+							})
+							sorted = true
+						}
+						if !emailIdxBinarySearch(emailIdxEntries, k) {
+							continue MinResLoop
+						}
+					} else {
+						if _, ok := res[i][k]; !ok {
+							continue MinResLoop
+						}
+					}
+				}
+				ids = append(ids, k)
+			}
 		}
-
 		sort.Slice(ids, func(i, j int) bool {
 			return ids[i] > ids[j]
 		})
@@ -794,4 +843,25 @@ func (db *DB) Find(query M) models.Accounts {
 	}
 
 	return accounts
+}
+
+func emailIdxBinarySearch(slice []emailIdxEntry, id int) bool {
+	low := 0
+	high := len(slice) - 1
+
+	for low <= high {
+		mid := (low + high) / 2
+		guess := slice[mid]
+		if guess.id == id {
+			return true
+		}
+
+		if guess.id > id {
+			high = mid - 1
+		} else {
+			low = mid + 1
+		}
+	}
+
+	return false
 }
