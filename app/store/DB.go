@@ -573,14 +573,14 @@ func (db *DB) Find(query M) models.Accounts {
 			res = append(res, db.emailDomainIdx[v.(string)])
 		case "email_lt":
 			x := db.getEmailLtIdxEntries(v.(string))
-			ids := make(map[int]void)
+			ids := make(map[int]void, len(x))
 			for _, e := range x {
 				ids[e.id] = void{}
 			}
 			res = append(res, ids)
 		case "email_gt":
 			x := db.getEmailGtIdxEntries(v.(string))
-			ids := make(map[int]void)
+			ids := make(map[int]void, len(x))
 			for _, e := range x {
 				ids[e.id] = void{}
 			}
@@ -593,7 +593,7 @@ func (db *DB) Find(query M) models.Accounts {
 			projection["phone"] = void{}
 		case "birth_lt":
 			x := db.getBirthLtIdxEntries(v.(int))
-			ids := make(map[int]void)
+			ids := make(map[int]void, len(x))
 			for _, e := range x {
 				ids[e.id] = void{}
 			}
@@ -601,7 +601,7 @@ func (db *DB) Find(query M) models.Accounts {
 			projection["birth"] = void{}
 		case "birth_gt":
 			x := db.getBirthGtIdxEntries(v.(int))
-			ids := make(map[int]void)
+			ids := make(map[int]void, len(x))
 			for _, e := range x {
 				ids[e.id] = void{}
 			}
