@@ -13,13 +13,13 @@ import (
 
 type minData struct {
 	accountsMin map[int]models.AccountMin
-	fnames      map[int]string
-	snames      map[int]string
+	fnames      map[uint8]string
+	snames      map[uint16]string
 	sex         map[byte]string
-	countries   map[int]string
-	cities      map[int]string
+	countries   map[uint8]string
+	cities      map[uint16]string
 	status      map[byte]string
-	interests   map[int]string
+	interests   map[uint8]string
 }
 
 type DB struct {
@@ -94,13 +94,13 @@ func NewDB() *DB {
 
 		minData: minData{
 			accountsMin: map[int]models.AccountMin{},
-			fnames:      map[int]string{},
-			snames:      map[int]string{},
+			fnames:      map[uint8]string{},
+			snames:      map[uint16]string{},
 			sex:         map[byte]string{0: "m", 1: "f"},
-			countries:   map[int]string{},
-			cities:      map[int]string{},
+			countries:   map[uint8]string{},
+			cities:      map[uint16]string{},
 			status:      map[byte]string{0: "свободны", 1: "заняты", 2: "всё сложно"},
-			interests:   map[int]string{},
+			interests:   map[uint8]string{},
 		},
 	}
 }
@@ -221,25 +221,25 @@ func (db *DB) LoadMinData(accounts []models.Account) {
 			Likes:   account.Likes,
 		}
 
-		accountMin.FName = len(db.fnames)
+		accountMin.FName = uint8(len(db.fnames))
 		for k, v := range db.fnames {
 			if v == account.FName {
 				accountMin.FName = k
 				break
 			}
 		}
-		if accountMin.FName == len(db.fnames) {
+		if accountMin.FName == uint8(len(db.fnames)) {
 			db.fnames[accountMin.FName] = account.FName
 		}
 
-		accountMin.SName = len(db.snames)
+		accountMin.SName = uint16(len(db.snames))
 		for k, v := range db.snames {
 			if v == account.SName {
 				accountMin.SName = k
 				break
 			}
 		}
-		if accountMin.SName == len(db.snames) {
+		if accountMin.SName == uint16(len(db.snames)) {
 			db.snames[accountMin.SName] = account.SName
 		}
 
@@ -247,25 +247,25 @@ func (db *DB) LoadMinData(accounts []models.Account) {
 			accountMin.Sex = 1
 		}
 
-		accountMin.Country = len(db.countries)
+		accountMin.Country = uint8(len(db.countries))
 		for k, v := range db.countries {
 			if v == account.Country {
 				accountMin.Country = k
 				break
 			}
 		}
-		if accountMin.Country == len(db.countries) {
+		if accountMin.Country == uint8(len(db.countries)) {
 			db.countries[accountMin.Country] = account.Country
 		}
 
-		accountMin.City = len(db.cities)
+		accountMin.City = uint16(len(db.cities))
 		for k, v := range db.cities {
 			if v == account.City {
 				accountMin.City = k
 				break
 			}
 		}
-		if accountMin.City == len(db.cities) {
+		if accountMin.City == uint16(len(db.cities)) {
 			db.cities[accountMin.City] = account.City
 		}
 
@@ -276,17 +276,16 @@ func (db *DB) LoadMinData(accounts []models.Account) {
 			accountMin.Status = 2
 		}
 
-		var interests []int
+		var interests []uint8
 		for _, interest := range account.Interests {
-			interestId := len(db.interests)
+			interestId := uint8(len(db.interests))
 			for k, v := range db.interests {
 				if v == interest {
 					interestId = k
 					break
 				}
 			}
-
-			if interestId == len(db.interests) {
+			if interestId == uint8(len(db.interests)) {
 				db.interests[interestId] = interest
 			}
 			interests = append(interests, interestId)
