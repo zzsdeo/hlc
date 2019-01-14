@@ -2,8 +2,6 @@ package store
 
 import (
 	"hlc/app/models"
-	"hlc/app/utils"
-	"log"
 	"runtime"
 	"sort"
 	"strings"
@@ -301,7 +299,6 @@ func (db *DB) LoadMinData(accounts []models.Account) {
 func (db *DB) CreateIndexes(now int) bool {
 	db.mu.RLock()
 	for k, v := range db.accountsMin {
-
 		if _, ok := db.sexIdx[db.sex[v.Sex]]; !ok {
 			db.sexIdx[db.sex[v.Sex]] = map[int]void{}
 		}
@@ -442,6 +439,8 @@ func (db *DB) CreateIndexes(now int) bool {
 
 		db.ids = append(db.ids, k)
 	}
+	runtime.GC()
+
 	sort.Slice(db.emailIdx, func(i, j int) bool {
 		return db.emailIdx[i].email < db.emailIdx[j].email
 	})
@@ -452,26 +451,27 @@ func (db *DB) CreateIndexes(now int) bool {
 		return db.ids[i] > db.ids[j]
 	})
 	db.mu.RUnlock()
+
 	runtime.GC()
 
-	log.Println("indexes size", utils.Sizeof(
-		db.sexIdx,
-		db.statusIdx,
-		db.fnameIdx,
-		db.snameIdx,
-		db.phoneCodeIdx,
-		db.countryIdx,
-		db.cityIdx,
-		db.emailIdx,
-		db.emailDomainIdx,
-		db.snamePrefixIdx,
-		db.birthIdx,
-		db.birthYearIdx,
-		db.interestsIdx,
-		db.likesIdx,
-		db.premiumIdx))
-
-	log.Println("db size", utils.Sizeof(db.accountsMin))
+	//log.Println("indexes size", utils.Sizeof(
+	//	db.sexIdx,
+	//	db.statusIdx,
+	//	db.fnameIdx,
+	//	db.snameIdx,
+	//	db.phoneCodeIdx,
+	//	db.countryIdx,
+	//	db.cityIdx,
+	//	db.emailIdx,
+	//	db.emailDomainIdx,
+	//	db.snamePrefixIdx,
+	//	db.birthIdx,
+	//	db.birthYearIdx,
+	//	db.interestsIdx,
+	//	db.likesIdx,
+	//	db.premiumIdx))
+	//
+	//log.Println("db size", utils.Sizeof(db.accountsMin))
 	return true
 }
 
