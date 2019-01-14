@@ -2,6 +2,8 @@ package store
 
 import (
 	"hlc/app/models"
+	"hlc/app/utils"
+	"log"
 	"runtime"
 	"sort"
 	"strings"
@@ -216,7 +218,7 @@ func (db *DB) LoadMinData(accounts []models.Account) {
 			Birth:   account.Birth,
 			Joined:  account.Joined,
 			Premium: account.Premium,
-			Likes:   account.Likes,
+			//Likes:   account.Likes,
 		}
 
 		accountMin.FName = uint8(len(db.fnames))
@@ -471,7 +473,24 @@ func (db *DB) CreateIndexes(now int) bool {
 	//	db.likesIdx,
 	//	db.premiumIdx))
 	//
-	//log.Println("db size", utils.Sizeof(db.accountsMin))
+	log.Println("db size", utils.Sizeof(db.accountsMin))
+
+	log.Println("db.sexIdx", utils.Sizeof(db.sexIdx))
+	log.Println("db.statusIdx", utils.Sizeof(db.statusIdx))
+	log.Println("db.fnameIdx", utils.Sizeof(db.fnameIdx))
+	log.Println("db.snameIdx", utils.Sizeof(db.snameIdx))
+	log.Println("db.phoneCodeIdx", utils.Sizeof(db.phoneCodeIdx))
+	log.Println("db.countryIdx", utils.Sizeof(db.countryIdx))
+	log.Println("db.cityIdx", utils.Sizeof(db.cityIdx))
+	log.Println("db.emailIdx", utils.Sizeof(db.emailIdx))
+	log.Println("db.emailDomainIdx", utils.Sizeof(db.emailDomainIdx))
+	log.Println("db.snamePrefixIdx", utils.Sizeof(db.snamePrefixIdx))
+	log.Println("db.birthIdx", utils.Sizeof(db.birthIdx))
+	log.Println("db.birthYearIdx", utils.Sizeof(db.birthYearIdx))
+	log.Println("db.interestsIdx", utils.Sizeof(db.interestsIdx))
+	log.Println("db.likesIdx", utils.Sizeof(db.likesIdx))
+	log.Println("db.premiumIdx", utils.Sizeof(db.premiumIdx))
+
 	return true
 }
 
