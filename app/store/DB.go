@@ -46,8 +46,6 @@ type DB struct {
 	interestsIdx      map[string]map[int]void
 	likesIdx          map[int]map[int]void
 	premiumIdx        map[byte]map[int]void // 0-null, 1-not_null, 2-now
-
-	cache map[string][]int
 }
 
 type void struct{}
@@ -93,8 +91,6 @@ func NewDB() *DB {
 		interestsIdx:      map[string]map[int]void{},
 		likesIdx:          map[int]map[int]void{},
 		premiumIdx:        map[byte]map[int]void{},
-
-		cache: map[string][]int{},
 
 		minData: minData{
 			accountsMin: map[int]models.AccountMin{},
@@ -344,7 +340,7 @@ func (db *DB) CalculateData() {
 
 func (db *DB) AddAccount(account models.Account) {
 	accountMin := models.AccountMin{
-		Email:   account.Email, //todo replace email with id
+		Email:   account.Email,
 		Phone:   account.Phone,
 		Birth:   account.Birth,
 		Joined:  account.Joined,
@@ -776,7 +772,6 @@ func (db *DB) CreateIndexes(now int) bool {
 
 func (db *DB) Find(query M) models.Accounts {
 	//log.Println("[DEBUG] query", query)
-	//todo cache
 	res := make([]map[int]void, 0)
 	projection := make(map[string]void)
 	for k, v := range query {
@@ -1050,43 +1045,43 @@ func (db *DB) Find(query M) models.Accounts {
 
 	accounts := models.Accounts{}
 	accounts.Accounts = make([]models.Account, 0)
-	for i, accountMin := range accountsMin {
-		account := models.Account{ID: ids[i], Email: accountMin.Email}
+	for i := range accountsMin {
+		account := models.Account{ID: ids[i], Email: accountsMin[i].Email}
 
 		if _, ok := projection["fname"]; ok {
-			account.FName = db.fnames[accountMin.FName]
+			account.FName = db.fnames[accountsMin[i].FName]
 		}
 
 		if _, ok := projection["sname"]; ok {
-			account.SName = db.snames[accountMin.SName]
+			account.SName = db.snames[accountsMin[i].SName]
 		}
 
 		if _, ok := projection["phone"]; ok {
-			account.Phone = accountMin.Phone
+			account.Phone = accountsMin[i].Phone
 		}
 
 		if _, ok := projection["sex"]; ok {
-			account.Sex = db.sex[accountMin.Sex]
+			account.Sex = db.sex[accountsMin[i].Sex]
 		}
 
 		if _, ok := projection["birth"]; ok {
-			account.Birth = accountMin.Birth
+			account.Birth = accountsMin[i].Birth
 		}
 
 		if _, ok := projection["country"]; ok {
-			account.Country = db.countries[accountMin.Country]
+			account.Country = db.countries[accountsMin[i].Country]
 		}
 
 		if _, ok := projection["city"]; ok {
-			account.City = db.cities[accountMin.City]
+			account.City = db.cities[accountsMin[i].City]
 		}
 
 		if _, ok := projection["status"]; ok {
-			account.Status = db.status[accountMin.Status]
+			account.Status = db.status[accountsMin[i].Status]
 		}
 
 		if _, ok := projection["premium"]; ok {
-			account.Premium = accountMin.Premium
+			account.Premium = accountsMin[i].Premium
 		}
 
 		accounts.Accounts = append(accounts.Accounts, account)
