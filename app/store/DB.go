@@ -46,6 +46,8 @@ type DB struct {
 	interestsIdx      map[string]map[int]void
 	likesIdx          map[int]map[int]void
 	premiumIdx        map[byte]map[int]void // 0-null, 1-not_null, 2-now
+
+	cache map[string][]int
 }
 
 type void struct{}
@@ -91,6 +93,8 @@ func NewDB() *DB {
 		interestsIdx:      map[string]map[int]void{},
 		likesIdx:          map[int]map[int]void{},
 		premiumIdx:        map[byte]map[int]void{},
+
+		cache: map[string][]int{},
 
 		minData: minData{
 			accountsMin: map[int]models.AccountMin{},
@@ -298,6 +302,282 @@ func (db *DB) LoadMinData(accounts []models.Account) {
 	runtime.GC()
 }
 
+func (db *DB) LoadMinData2(accounts []models.Account, now int) {
+	db.mu.RLock()
+	for i := range accounts {
+		db.AddAccount(accounts[i])
+		db.UpdateIndex(accounts[i], now)
+	}
+
+	sort.Slice(db.emailIdx, func(i, j int) bool {
+		return db.emailIdx[i].email < db.emailIdx[j].email
+	})
+	sort.Slice(db.birthIdx, func(i, j int) bool {
+		return db.birthIdx[i].birth < db.birthIdx[j].birth
+	})
+	sort.Slice(db.ids, func(i, j int) bool {
+		return db.ids[i] > db.ids[j]
+	})
+	db.mu.RUnlock()
+	runtime.GC()
+}
+
+func (db *DB) CalculateData() {
+	log.Println("db size", utils.Sizeof(db.accountsMin))
+
+	log.Println("db.sexIdx", utils.Sizeof(db.sexIdx))
+	log.Println("db.statusIdx", utils.Sizeof(db.statusIdx))
+	log.Println("db.fnameIdx", utils.Sizeof(db.fnameIdx))
+	log.Println("db.snameIdx", utils.Sizeof(db.snameIdx))
+	log.Println("db.phoneCodeIdx", utils.Sizeof(db.phoneCodeIdx))
+	log.Println("db.countryIdx", utils.Sizeof(db.countryIdx))
+	log.Println("db.cityIdx", utils.Sizeof(db.cityIdx))
+	log.Println("db.emailIdx", utils.Sizeof(db.emailIdx))
+	log.Println("db.emailDomainIdx", utils.Sizeof(db.emailDomainIdx))
+	log.Println("db.snamePrefixIdx", utils.Sizeof(db.snamePrefixIdx))
+	log.Println("db.birthIdx", utils.Sizeof(db.birthIdx))
+	log.Println("db.birthYearIdx", utils.Sizeof(db.birthYearIdx))
+	log.Println("db.interestsIdx", utils.Sizeof(db.interestsIdx))
+	log.Println("db.likesIdx", utils.Sizeof(db.likesIdx))
+	log.Println("db.premiumIdx", utils.Sizeof(db.premiumIdx))
+}
+
+func (db *DB) AddAccount(account models.Account) {
+	accountMin := models.AccountMin{
+		Email:   account.Email, //todo replace email with id
+		Phone:   account.Phone,
+		Birth:   account.Birth,
+		Joined:  account.Joined,
+		Premium: account.Premium,
+		//Likes:   account.Likes,
+	}
+
+	accountMin.FName = uint8(len(db.fnames))
+	for k, v := range db.fnames {
+		if v == account.FName {
+			accountMin.FName = k
+			break
+		}
+	}
+	if accountMin.FName == uint8(len(db.fnames)) {
+		db.fnames[accountMin.FName] = account.FName
+	}
+
+	accountMin.SName = uint16(len(db.snames))
+	for k, v := range db.snames {
+		if v == account.SName {
+			accountMin.SName = k
+			break
+		}
+	}
+	if accountMin.SName == uint16(len(db.snames)) {
+		db.snames[accountMin.SName] = account.SName
+	}
+
+	if account.Sex == "f" {
+		accountMin.Sex = 1
+	}
+
+	accountMin.Country = uint8(len(db.countries))
+	for k, v := range db.countries {
+		if v == account.Country {
+			accountMin.Country = k
+			break
+		}
+	}
+	if accountMin.Country == uint8(len(db.countries)) {
+		db.countries[accountMin.Country] = account.Country
+	}
+
+	accountMin.City = uint16(len(db.cities))
+	for k, v := range db.cities {
+		if v == account.City {
+			accountMin.City = k
+			break
+		}
+	}
+	if accountMin.City == uint16(len(db.cities)) {
+		db.cities[accountMin.City] = account.City
+	}
+
+	switch account.Status {
+	case "заняты":
+		accountMin.Status = 1
+	case "всё сложно":
+		accountMin.Status = 2
+	}
+
+	var interests []uint8
+	for _, interest := range account.Interests {
+		interestId := uint8(len(db.interests))
+		for k, v := range db.interests {
+			if v == interest {
+				interestId = k
+				break
+			}
+		}
+		if interestId == uint8(len(db.interests)) {
+			db.interests[interestId] = interest
+		}
+		interests = append(interests, interestId)
+	}
+	accountMin.Interests = interests
+
+	db.accountsMin[account.ID] = accountMin
+}
+
+func (db *DB) UpdateIndex(account models.Account, now int) {
+	if _, ok := db.sexIdx[account.Sex]; !ok {
+		db.sexIdx[account.Sex] = map[int]void{}
+	}
+	db.sexIdx[account.Sex][account.ID] = void{}
+
+	if _, ok := db.statusIdx[account.Status]; !ok {
+		db.statusIdx[account.Status] = map[int]void{}
+	}
+	db.statusIdx[account.Status][account.ID] = void{}
+
+	switch account.Status {
+	case "свободны":
+		db.statusNeqIdx[db.status[1]][account.ID] = void{}
+		db.statusNeqIdx[db.status[2]][account.ID] = void{}
+	case "заняты":
+		db.statusNeqIdx[db.status[0]][account.ID] = void{}
+		db.statusNeqIdx[db.status[2]][account.ID] = void{}
+	case "всё сложно":
+		db.statusNeqIdx[db.status[0]][account.ID] = void{}
+		db.statusNeqIdx[db.status[1]][account.ID] = void{}
+	}
+
+	if _, ok := db.fnameIdx[account.FName]; !ok {
+		db.fnameIdx[account.FName] = map[int]void{}
+	}
+	db.fnameIdx[account.FName][account.ID] = void{}
+
+	if account.FName != "" {
+		db.fnameNotNullIdx[account.ID] = void{}
+	}
+
+	if _, ok := db.snameIdx[account.SName]; !ok {
+		db.snameIdx[account.SName] = map[int]void{}
+	}
+	db.snameIdx[account.SName][account.ID] = void{}
+
+	if account.SName != "" {
+		db.snameNotNullIdx[account.ID] = void{}
+	}
+
+	phoneCode := ""
+	if account.Phone != "" {
+		s := strings.Split(account.Phone, "(")
+		s = strings.Split(s[1], ")")
+		phoneCode = s[0]
+	}
+	if _, ok := db.phoneCodeIdx[phoneCode]; !ok {
+		db.phoneCodeIdx[phoneCode] = map[int]void{}
+	}
+	db.phoneCodeIdx[phoneCode][account.ID] = void{}
+
+	if _, ok := db.countryIdx[account.Country]; !ok {
+		db.countryIdx[account.Country] = map[int]void{}
+	}
+	db.countryIdx[account.Country][account.ID] = void{}
+
+	if account.Country != "" {
+		db.countryNotNullIdx[account.ID] = void{}
+	}
+
+	if _, ok := db.cityIdx[account.City]; !ok {
+		db.cityIdx[account.City] = map[int]void{}
+	}
+	db.cityIdx[account.City][account.ID] = void{}
+
+	if account.City != "" {
+		db.cityNotNullIdx[account.ID] = void{}
+	}
+
+	db.emailIdx = append(db.emailIdx, emailIdxEntry{account.Email, account.ID})
+
+	domain := strings.Split(account.Email, "@")[1]
+	if _, ok := db.emailDomainIdx[domain]; !ok {
+		db.emailDomainIdx[domain] = map[int]void{}
+	}
+	db.emailDomainIdx[domain][account.ID] = void{}
+
+	if account.SName != "" {
+		start := true
+		var currentNode trieNode
+		for _, char := range account.SName {
+			if start {
+				if _, ok := db.snamePrefixIdx.next[char]; !ok {
+					db.snamePrefixIdx.next[char] = trieNode{next: make(map[int32]trieNode), ids: make(map[int]void)}
+				}
+				currentNode = db.snamePrefixIdx.next[char]
+				currentNode.ids[account.ID] = void{}
+				start = false
+			} else {
+				if _, ok := currentNode.next[char]; !ok {
+					currentNode.next[char] = trieNode{next: make(map[int32]trieNode), ids: make(map[int]void)}
+				}
+				currentNode = currentNode.next[char]
+				currentNode.ids[account.ID] = void{}
+			}
+		}
+	}
+
+	db.birthIdx = append(db.birthIdx, birthIdxEntry{account.Birth, account.ID})
+
+	year := time.Unix(int64(account.Birth), 0).Year()
+	if _, ok := db.birthYearIdx[year]; !ok {
+		db.birthYearIdx[year] = map[int]void{}
+	}
+	db.birthYearIdx[year][account.ID] = void{}
+
+	for _, interest := range account.Interests {
+		if _, ok := db.interestsIdx[interest]; !ok {
+			db.interestsIdx[interest] = map[int]void{}
+		}
+		db.interestsIdx[interest][account.ID] = void{}
+	}
+
+	for _, like := range account.Likes {
+		if _, ok := db.likesIdx[like.ID]; !ok {
+			db.likesIdx[like.ID] = map[int]void{}
+		}
+		db.likesIdx[like.ID][account.ID] = void{}
+	}
+
+	if account.Premium == nil {
+		if _, ok := db.premiumIdx[0]; !ok {
+			db.premiumIdx[0] = map[int]void{}
+		}
+		db.premiumIdx[0][account.ID] = void{}
+	} else {
+		if _, ok := db.premiumIdx[1]; !ok {
+			db.premiumIdx[1] = map[int]void{}
+		}
+		db.premiumIdx[1][account.ID] = void{}
+		if account.PremiumNow(now) {
+			if _, ok := db.premiumIdx[2]; !ok {
+				db.premiumIdx[2] = map[int]void{}
+			}
+			db.premiumIdx[2][account.ID] = void{}
+		}
+	}
+
+	db.ids = append(db.ids, account.ID)
+	//
+	//sort.Slice(db.emailIdx, func(i, j int) bool {
+	//	return db.emailIdx[i].email < db.emailIdx[j].email
+	//})
+	//sort.Slice(db.birthIdx, func(i, j int) bool {
+	//	return db.birthIdx[i].birth < db.birthIdx[j].birth
+	//})
+	//sort.Slice(db.ids, func(i, j int) bool {
+	//	return db.ids[i] > db.ids[j]
+	//})
+}
+
 func (db *DB) CreateIndexes(now int) bool {
 	db.mu.RLock()
 	for k, v := range db.accountsMin {
@@ -496,6 +776,7 @@ func (db *DB) CreateIndexes(now int) bool {
 
 func (db *DB) Find(query M) models.Accounts {
 	//log.Println("[DEBUG] query", query)
+	//todo cache
 	res := make([]map[int]void, 0)
 	projection := make(map[string]void)
 	for k, v := range query {

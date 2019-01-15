@@ -55,7 +55,9 @@ func main() {
 		log.Fatal("[ERROR] ", err)
 	}
 
-	app.CreateIndexes()
+	//app.CreateIndexes()
+
+	app.CalculateData()
 
 	app.Run(opts.listenAddr)
 }

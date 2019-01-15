@@ -102,7 +102,7 @@ func (a *App) Initialize(now int) {
 }
 
 func (a *App) LoadData(accounts []models.Account) {
-	a.db.LoadMinData(accounts)
+	a.db.LoadMinData2(accounts, a.now)
 	log.Println("[INFO] added ", len(accounts), " accounts")
 }
 
@@ -110,6 +110,10 @@ func (a *App) CreateIndexes() {
 	log.Println("[INFO] indexing started")
 	a.db.CreateIndexes(a.now)
 	log.Println("[INFO] indexing finished")
+}
+
+func (a *App) CalculateData() {
+	a.db.CalculateData()
 }
 
 func (a *App) Run(listenAddr string) {
