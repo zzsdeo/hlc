@@ -24,7 +24,7 @@ type minData struct {
 
 type DB struct {
 	minData
-	mu                *sync.RWMutex
+	mu                *sync.Mutex
 	ids               []int
 	sexIdx            map[string]map[int]void
 	statusIdx         map[string]map[int]void
@@ -69,7 +69,7 @@ type trieNode struct {
 
 func NewDB() *DB {
 	return &DB{
-		mu:                &sync.RWMutex{},
+		mu:                &sync.Mutex{},
 		ids:               make([]int, 0),
 		sexIdx:            map[string]map[int]void{},
 		statusIdx:         map[string]map[int]void{},
@@ -210,7 +210,7 @@ func (db *DB) getSnamePrefixIds(prefix string) map[int]void {
 }
 
 func (db *DB) LoadMinData(accounts []models.Account) {
-	db.mu.RLock()
+	db.mu.Lock()
 	for _, account := range accounts {
 		accountMin := models.AccountMin{
 			Email:   account.Email,
@@ -294,17 +294,45 @@ func (db *DB) LoadMinData(accounts []models.Account) {
 
 		db.accountsMin[account.ID] = accountMin
 	}
-	db.mu.RUnlock()
+	db.mu.Unlock()
 	runtime.GC()
 }
 
-func (db *DB) LoadMinData2(accounts []models.Account, now int) {
-	db.mu.RLock()
-	for i := range accounts {
-		db.AddAccount(accounts[i])
-		db.UpdateIndex(accounts[i], now)
-	}
+//func (db *DB) LoadMinData2(accounts []models.Account, now int) {
+//	//db.mu.Lock()
+//	for i := range accounts {
+//		db.AddAccount(accounts[i])
+//		db.UpdateIndex(accounts[i], now)
+//	}
+//
+//	sort.Slice(db.emailIdx, func(i, j int) bool {
+//		return db.emailIdx[i].email < db.emailIdx[j].email
+//	})
+//	sort.Slice(db.birthIdx, func(i, j int) bool {
+//		return db.birthIdx[i].birth < db.birthIdx[j].birth
+//	})
+//	sort.Slice(db.ids, func(i, j int) bool {
+//		return db.ids[i] > db.ids[j]
+//	})
+//	//db.mu.Unlock()
+//	//runtime.GC()
+//}
 
+func (db *DB) LoadMinData2(accounts []models.Account, now int) {
+	jobs := make(chan models.Account, len(accounts))
+	numOfWorkers := 100
+	for numOfWorkers >= 0 {
+		go db.accountWorker(jobs)
+		go db.indexWorker(jobs, now)
+		numOfWorkers--
+	}
+	for i := range accounts {
+		jobs <- accounts[i]
+	}
+	close(jobs)
+}
+
+func (db *DB) SortSlices() {
 	sort.Slice(db.emailIdx, func(i, j int) bool {
 		return db.emailIdx[i].email < db.emailIdx[j].email
 	})
@@ -314,8 +342,18 @@ func (db *DB) LoadMinData2(accounts []models.Account, now int) {
 	sort.Slice(db.ids, func(i, j int) bool {
 		return db.ids[i] > db.ids[j]
 	})
-	db.mu.RUnlock()
-	runtime.GC()
+}
+
+func (db *DB) accountWorker(jobs <-chan models.Account) {
+	for j := range jobs {
+		db.AddAccount(j)
+	}
+}
+
+func (db *DB) indexWorker(jobs <-chan models.Account, now int) {
+	for j := range jobs {
+		db.UpdateIndex(j, now)
+	}
 }
 
 func (db *DB) CalculateData() {
@@ -339,6 +377,7 @@ func (db *DB) CalculateData() {
 }
 
 func (db *DB) AddAccount(account models.Account) {
+	db.mu.Lock()
 	accountMin := models.AccountMin{
 		Email:   account.Email,
 		Phone:   account.Phone,
@@ -420,9 +459,12 @@ func (db *DB) AddAccount(account models.Account) {
 	accountMin.Interests = interests
 
 	db.accountsMin[account.ID] = accountMin
+
+	db.mu.Unlock()
 }
 
 func (db *DB) UpdateIndex(account models.Account, now int) {
+	db.mu.Lock()
 	if _, ok := db.sexIdx[account.Sex]; !ok {
 		db.sexIdx[account.Sex] = map[int]void{}
 	}
@@ -562,7 +604,7 @@ func (db *DB) UpdateIndex(account models.Account, now int) {
 	}
 
 	db.ids = append(db.ids, account.ID)
-	//
+
 	//sort.Slice(db.emailIdx, func(i, j int) bool {
 	//	return db.emailIdx[i].email < db.emailIdx[j].email
 	//})
@@ -572,10 +614,12 @@ func (db *DB) UpdateIndex(account models.Account, now int) {
 	//sort.Slice(db.ids, func(i, j int) bool {
 	//	return db.ids[i] > db.ids[j]
 	//})
+
+	db.mu.Unlock()
 }
 
 func (db *DB) CreateIndexes(now int) bool {
-	db.mu.RLock()
+	db.mu.Lock()
 	for k, v := range db.accountsMin {
 		if _, ok := db.sexIdx[db.sex[v.Sex]]; !ok {
 			db.sexIdx[db.sex[v.Sex]] = map[int]void{}
@@ -728,7 +772,7 @@ func (db *DB) CreateIndexes(now int) bool {
 	sort.Slice(db.ids, func(i, j int) bool {
 		return db.ids[i] > db.ids[j]
 	})
-	db.mu.RUnlock()
+	db.mu.Unlock()
 
 	runtime.GC()
 
@@ -749,24 +793,6 @@ func (db *DB) CreateIndexes(now int) bool {
 	//	db.likesIdx,
 	//	db.premiumIdx))
 	//
-	log.Println("db size", utils.Sizeof(db.accountsMin))
-
-	log.Println("db.sexIdx", utils.Sizeof(db.sexIdx))
-	log.Println("db.statusIdx", utils.Sizeof(db.statusIdx))
-	log.Println("db.fnameIdx", utils.Sizeof(db.fnameIdx))
-	log.Println("db.snameIdx", utils.Sizeof(db.snameIdx))
-	log.Println("db.phoneCodeIdx", utils.Sizeof(db.phoneCodeIdx))
-	log.Println("db.countryIdx", utils.Sizeof(db.countryIdx))
-	log.Println("db.cityIdx", utils.Sizeof(db.cityIdx))
-	log.Println("db.emailIdx", utils.Sizeof(db.emailIdx))
-	log.Println("db.emailDomainIdx", utils.Sizeof(db.emailDomainIdx))
-	log.Println("db.snamePrefixIdx", utils.Sizeof(db.snamePrefixIdx))
-	log.Println("db.birthIdx", utils.Sizeof(db.birthIdx))
-	log.Println("db.birthYearIdx", utils.Sizeof(db.birthYearIdx))
-	log.Println("db.interestsIdx", utils.Sizeof(db.interestsIdx))
-	log.Println("db.likesIdx", utils.Sizeof(db.likesIdx))
-	log.Println("db.premiumIdx", utils.Sizeof(db.premiumIdx))
-
 	return true
 }
 

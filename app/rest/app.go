@@ -113,6 +113,12 @@ func (a *App) LoadData(accounts []models.Account) {
 	log.Println("[INFO] added ", len(accounts), " accounts")
 }
 
+func (a *App) SortSlices() {
+	log.Println("[INFO] sorting")
+	a.db.SortSlices()
+	log.Println("[INFO] sorting done")
+}
+
 func (a *App) CreateIndexes() {
 	log.Println("[INFO] indexing started")
 	a.db.CreateIndexes(a.now)
@@ -146,29 +152,29 @@ func (a *App) filter(ctx *fasthttp.RequestCtx) {
 	//defer utils.TimeTrack(time.Now(), ctx.QueryArgs().Peek("query_id"))
 	ctx.SetContentType("application/json")
 
-	if b, ok := a.cache[ctx.QueryArgs().GetUintOrZero("query_id")]; ok {
-		if string(b) != "-" {
-			_, err := ctx.Write(b)
-			if err != nil {
-				ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-				log.Println("[ERROR] ", err)
-				return
-			}
-
-			ctx.SetStatusCode(fasthttp.StatusOK)
-			return
-		}
-
-		_, err := ctx.Write([]byte{})
-		if err != nil {
-			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-			log.Println("[ERROR] ", err)
-			return
-		}
-
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		return
-	}
+	//if b, ok := a.cache[ctx.QueryArgs().GetUintOrZero("query_id")]; ok {
+	//	if string(b) != "-" {
+	//		_, err := ctx.Write(b)
+	//		if err != nil {
+	//			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+	//			log.Println("[ERROR] ", err)
+	//			return
+	//		}
+	//
+	//		ctx.SetStatusCode(fasthttp.StatusOK)
+	//		return
+	//	}
+	//
+	//	_, err := ctx.Write([]byte{})
+	//	if err != nil {
+	//		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+	//		log.Println("[ERROR] ", err)
+	//		return
+	//	}
+	//
+	//	ctx.SetStatusCode(fasthttp.StatusBadRequest)
+	//	return
+	//}
 
 	query := store.M{}
 	isBadArg := false
@@ -313,9 +319,9 @@ func (a *App) filter(ctx *fasthttp.RequestCtx) {
 	//log.Println("[DEBUG] query=", query)
 
 	if isBadArg {
-		a.mu.Lock()
-		a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = []byte("-")
-		a.mu.Unlock()
+		//a.mu.Lock()
+		//a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = []byte("-")
+		//a.mu.Unlock()
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		return
 	}
@@ -323,7 +329,6 @@ func (a *App) filter(ctx *fasthttp.RequestCtx) {
 	accounts := a.db.Find(query)
 
 	b, err := easyjson.Marshal(&accounts)
-	//err := json.NewEncoder(w).Encode(a.db.Find(query))
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		log.Println("[ERROR] ", err)
@@ -337,9 +342,9 @@ func (a *App) filter(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	a.mu.Lock()
-	a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = b
-	a.mu.Unlock()
+	//a.mu.Lock()
+	//a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = b
+	//a.mu.Unlock()
 
 	ctx.SetStatusCode(fasthttp.StatusOK)
 }

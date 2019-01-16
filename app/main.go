@@ -15,16 +15,16 @@ const (
 	listenAddrEnvName = "SERVER_ADDR"
 	defaultListenAddr = ":80"
 
-	//optionsFilePath = "/tmp/data/options.txt" //todo docker
-	//dataFilePath    = "/tmp/data/data.zip"
+	optionsFilePath = "/tmp/data/options.txt" //todo docker
+	dataFilePath    = "/tmp/data/data.zip"
 
 	//dataPath    = "/tmp/data/data/"
 
 	//optionsFilePath = "/home/zzsdeo/tmp/data/options.txt" //todo hp
 	//dataFilePath    = "/home/zzsdeo/tmp/data/data.zip"
 
-	optionsFilePath = "./tmp/data/options.txt" //todo home
-	dataFilePath    = "./tmp/data/data.zip"
+	//optionsFilePath = "./tmp/data/options.txt" //todo home
+	//dataFilePath    = "./tmp/data/data.zip"
 )
 
 type opts struct {
@@ -43,6 +43,7 @@ func main() {
 	if err != nil {
 		log.Fatal("[ERROR] ", err)
 	}
+
 	for _, file := range r.File {
 		data, err := parseData(file)
 		if err != nil {
@@ -54,6 +55,8 @@ func main() {
 	if err != nil {
 		log.Fatal("[ERROR] ", err)
 	}
+
+	app.SortSlices()
 
 	//app.CreateIndexes()
 
@@ -97,26 +100,6 @@ func readZip() (*zip.ReadCloser, error) {
 	return r, nil
 }
 
-//func parseData(f *zip.File) (models.Accounts, error) {
-//	accounts := models.Accounts{}
-//	file, err := f.Open()
-//	if err != nil {
-//		return accounts, err
-//	}
-//
-//	err = easyjson.UnmarshalFromReader(file, &accounts)
-//	if err != nil {
-//		return accounts, err
-//	}
-//
-//	err = file.Close()
-//	if err != nil {
-//		log.Println("[ERROR] ", err)
-//	}
-//
-//	return accounts, nil
-//}
-
 func parseData(f *zip.File) (models.Accounts, error) {
 	accounts := models.Accounts{}
 	file, err := f.Open()
@@ -124,7 +107,7 @@ func parseData(f *zip.File) (models.Accounts, error) {
 		return accounts, err
 	}
 
-	err = easyjson.UnmarshalFromReader(bufio.NewReader(file), &accounts)
+	err = easyjson.UnmarshalFromReader(file, &accounts)
 	if err != nil {
 		return accounts, err
 	}
