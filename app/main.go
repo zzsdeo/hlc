@@ -97,6 +97,26 @@ func readZip() (*zip.ReadCloser, error) {
 	return r, nil
 }
 
+//func parseData(f *zip.File) (models.Accounts, error) {
+//	accounts := models.Accounts{}
+//	file, err := f.Open()
+//	if err != nil {
+//		return accounts, err
+//	}
+//
+//	err = easyjson.UnmarshalFromReader(file, &accounts)
+//	if err != nil {
+//		return accounts, err
+//	}
+//
+//	err = file.Close()
+//	if err != nil {
+//		log.Println("[ERROR] ", err)
+//	}
+//
+//	return accounts, nil
+//}
+
 func parseData(f *zip.File) (models.Accounts, error) {
 	accounts := models.Accounts{}
 	file, err := f.Open()
@@ -104,7 +124,7 @@ func parseData(f *zip.File) (models.Accounts, error) {
 		return accounts, err
 	}
 
-	err = easyjson.UnmarshalFromReader(file, &accounts)
+	err = easyjson.UnmarshalFromReader(bufio.NewReader(file), &accounts)
 	if err != nil {
 		return accounts, err
 	}

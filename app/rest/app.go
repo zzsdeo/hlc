@@ -9,6 +9,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 type queryKeys struct {
@@ -52,6 +53,9 @@ type App struct {
 	paths
 	db  *store.DB
 	now int //current time from options.txt
+
+	cache map[int][]byte
+	mu    *sync.Mutex
 }
 
 func (a *App) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
@@ -67,6 +71,9 @@ func (a *App) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 func (a *App) Initialize(now int) {
 	a.db = store.NewDB()
 	a.now = now
+
+	a.cache = make(map[int][]byte, 90000)
+	a.mu = &sync.Mutex{}
 
 	a.filterPath = []byte("/accounts/filter/")
 
@@ -138,6 +145,31 @@ func (a *App) Run(listenAddr string) {
 func (a *App) filter(ctx *fasthttp.RequestCtx) {
 	//defer utils.TimeTrack(time.Now(), ctx.QueryArgs().Peek("query_id"))
 	ctx.SetContentType("application/json")
+
+	if b, ok := a.cache[ctx.QueryArgs().GetUintOrZero("query_id")]; ok {
+		if string(b) != "-" {
+			_, err := ctx.Write(b)
+			if err != nil {
+				ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+				log.Println("[ERROR] ", err)
+				return
+			}
+
+			ctx.SetStatusCode(fasthttp.StatusOK)
+			return
+		}
+
+		_, err := ctx.Write([]byte{})
+		if err != nil {
+			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+			log.Println("[ERROR] ", err)
+			return
+		}
+
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		return
+	}
+
 	query := store.M{}
 	isBadArg := false
 	ctx.QueryArgs().VisitAll(func(key, value []byte) {
@@ -281,6 +313,9 @@ func (a *App) filter(ctx *fasthttp.RequestCtx) {
 	//log.Println("[DEBUG] query=", query)
 
 	if isBadArg {
+		a.mu.Lock()
+		a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = []byte("-")
+		a.mu.Unlock()
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		return
 	}
@@ -301,6 +336,10 @@ func (a *App) filter(ctx *fasthttp.RequestCtx) {
 		log.Println("[ERROR] ", err)
 		return
 	}
+
+	a.mu.Lock()
+	a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = b
+	a.mu.Unlock()
 
 	ctx.SetStatusCode(fasthttp.StatusOK)
 }
