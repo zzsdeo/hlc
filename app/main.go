@@ -57,7 +57,7 @@ func main() {
 
 	//app.CreateIndexes()
 
-	app.CalculateData()
+	//app.CalculateData()
 
 	app.Run(opts.listenAddr)
 }
