@@ -56,12 +56,6 @@ func main() {
 		log.Fatal("[ERROR] ", err)
 	}
 
-	app.SortSlices()
-
-	//app.CreateIndexes()
-
-	//app.CalculateData()
-
 	app.Run(opts.listenAddr)
 }
 

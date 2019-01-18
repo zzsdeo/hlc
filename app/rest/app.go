@@ -113,22 +113,6 @@ func (a *App) LoadData(accounts []models.Account) {
 	log.Println("[INFO] added ", len(accounts), " accounts")
 }
 
-func (a *App) SortSlices() {
-	log.Println("[INFO] sorting")
-	a.db.SortSlices()
-	log.Println("[INFO] sorting done")
-}
-
-func (a *App) CreateIndexes() {
-	log.Println("[INFO] indexing started")
-	a.db.CreateIndexes(a.now)
-	log.Println("[INFO] indexing finished")
-}
-
-func (a *App) CalculateData() {
-	a.db.CalculateData()
-}
-
 func (a *App) Run(listenAddr string) {
 	log.Println("[INFO] start server on", listenAddr)
 	log.Fatal("[ERROR] ", fasthttp.ListenAndServe(listenAddr, a.HandleFastHTTP))
