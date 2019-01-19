@@ -109,8 +109,14 @@ func (a *App) Initialize(now int) {
 }
 
 func (a *App) LoadData(accounts []models.Account) {
-	a.db.LoadMinData2(accounts, a.now)
+	a.db.LoadData(accounts)
 	log.Println("[INFO] added ", len(accounts), " accounts")
+}
+
+func (a *App) SortDB() {
+	log.Println("[INFO] sorting...")
+	a.db.SortDB()
+	log.Println("[INFO] sorting finished")
 }
 
 func (a *App) Run(listenAddr string) {
@@ -136,29 +142,29 @@ func (a *App) filter(ctx *fasthttp.RequestCtx) {
 	//defer utils.TimeTrack(time.Now(), ctx.QueryArgs().Peek("query_id"))
 	ctx.SetContentType("application/json")
 
-	//if b, ok := a.cache[ctx.QueryArgs().GetUintOrZero("query_id")]; ok {
-	//	if string(b) != "-" {
-	//		_, err := ctx.Write(b)
-	//		if err != nil {
-	//			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-	//			log.Println("[ERROR] ", err)
-	//			return
-	//		}
-	//
-	//		ctx.SetStatusCode(fasthttp.StatusOK)
-	//		return
-	//	}
-	//
-	//	_, err := ctx.Write([]byte{})
-	//	if err != nil {
-	//		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-	//		log.Println("[ERROR] ", err)
-	//		return
-	//	}
-	//
-	//	ctx.SetStatusCode(fasthttp.StatusBadRequest)
-	//	return
-	//}
+	if b, ok := a.cache[ctx.QueryArgs().GetUintOrZero("query_id")]; ok {
+		if string(b) != "-" {
+			_, err := ctx.Write(b)
+			if err != nil {
+				ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+				log.Println("[ERROR] ", err)
+				return
+			}
+
+			ctx.SetStatusCode(fasthttp.StatusOK)
+			return
+		}
+
+		_, err := ctx.Write([]byte{})
+		if err != nil {
+			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+			log.Println("[ERROR] ", err)
+			return
+		}
+
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		return
+	}
 
 	query := store.M{}
 	isBadArg := false
@@ -303,9 +309,9 @@ func (a *App) filter(ctx *fasthttp.RequestCtx) {
 	//log.Println("[DEBUG] query=", query)
 
 	if isBadArg {
-		//a.mu.Lock()
-		//a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = []byte("-")
-		//a.mu.Unlock()
+		a.mu.Lock()
+		a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = []byte("-")
+		a.mu.Unlock()
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		return
 	}
@@ -326,9 +332,9 @@ func (a *App) filter(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	//a.mu.Lock()
-	//a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = b
-	//a.mu.Unlock()
+	a.mu.Lock()
+	a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = b
+	a.mu.Unlock()
 
 	ctx.SetStatusCode(fasthttp.StatusOK)
 }
