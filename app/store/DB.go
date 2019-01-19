@@ -166,8 +166,10 @@ func (db *DB) AddAccount(account models.Account) {
 }
 
 func (db *DB) Find(query M) models.Accounts {
-	var accountsMin []models.AccountMin
 	projection := make(map[string]void)
+	limit := query["limit"].(int)
+	accounts := models.Accounts{}
+	accounts.Accounts = make([]models.Account, 0)
 MainLoop:
 	for _, accountMin := range db.accountsMin {
 	InnerLoop:
@@ -370,53 +372,50 @@ MainLoop:
 				projection["premium"] = void{}
 			}
 		}
-		accountsMin = append(accountsMin, accountMin)
+
+		if limit > 0 {
+			limit--
+			account := models.Account{ID: accountMin.ID, Email: accountMin.Email}
+
+			if _, ok := projection["fname"]; ok {
+				account.FName = db.fnames[accountMin.FName]
+			}
+
+			if _, ok := projection["sname"]; ok {
+				account.SName = db.snames[accountMin.SName]
+			}
+
+			if _, ok := projection["phone"]; ok {
+				account.Phone = accountMin.Phone
+			}
+
+			if _, ok := projection["sex"]; ok {
+				account.Sex = db.sex[accountMin.Sex]
+			}
+
+			if _, ok := projection["birth"]; ok {
+				account.Birth = accountMin.Birth
+			}
+
+			if _, ok := projection["country"]; ok {
+				account.Country = db.countries[accountMin.Country]
+			}
+
+			if _, ok := projection["city"]; ok {
+				account.City = db.cities[accountMin.City]
+			}
+
+			if _, ok := projection["status"]; ok {
+				account.Status = db.status[accountMin.Status]
+			}
+
+			if _, ok := projection["premium"]; ok {
+				account.Premium = accountMin.Premium
+			}
+
+			accounts.Accounts = append(accounts.Accounts, account)
+		}
+
 	}
-
-	limit := query["limit"].(int)
-	accounts := models.Accounts{}
-	accounts.Accounts = make([]models.Account, 0)
-	for i := 0; i < limit && i < len(accountsMin); i++ {
-		account := models.Account{ID: accountsMin[i].ID, Email: accountsMin[i].Email}
-
-		if _, ok := projection["fname"]; ok {
-			account.FName = db.fnames[accountsMin[i].FName]
-		}
-
-		if _, ok := projection["sname"]; ok {
-			account.SName = db.snames[accountsMin[i].SName]
-		}
-
-		if _, ok := projection["phone"]; ok {
-			account.Phone = accountsMin[i].Phone
-		}
-
-		if _, ok := projection["sex"]; ok {
-			account.Sex = db.sex[accountsMin[i].Sex]
-		}
-
-		if _, ok := projection["birth"]; ok {
-			account.Birth = accountsMin[i].Birth
-		}
-
-		if _, ok := projection["country"]; ok {
-			account.Country = db.countries[accountsMin[i].Country]
-		}
-
-		if _, ok := projection["city"]; ok {
-			account.City = db.cities[accountsMin[i].City]
-		}
-
-		if _, ok := projection["status"]; ok {
-			account.Status = db.status[accountsMin[i].Status]
-		}
-
-		if _, ok := projection["premium"]; ok {
-			account.Premium = accountsMin[i].Premium
-		}
-
-		accounts.Accounts = append(accounts.Accounts, account)
-	}
-
 	return accounts
 }

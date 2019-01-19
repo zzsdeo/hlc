@@ -8,6 +8,7 @@ import (
 	"hlc/app/rest"
 	"log"
 	"os"
+	"runtime"
 	"strconv"
 )
 
@@ -15,16 +16,16 @@ const (
 	listenAddrEnvName = "SERVER_ADDR"
 	defaultListenAddr = ":80"
 
-	//optionsFilePath = "/tmp/data/options.txt" //todo docker
-	//dataFilePath    = "/tmp/data/data.zip"
+	optionsFilePath = "/tmp/data/options.txt" //todo docker
+	dataFilePath    = "/tmp/data/data.zip"
 
 	//dataPath    = "/tmp/data/data/"
 
 	//optionsFilePath = "/home/zzsdeo/tmp/data/options.txt" //todo hp
 	//dataFilePath    = "/home/zzsdeo/tmp/data/data.zip"
 
-	optionsFilePath = "./tmp/data/options.txt" //todo home
-	dataFilePath    = "./tmp/data/data.zip"
+	//optionsFilePath = "./tmp/data/options.txt" //todo home
+	//dataFilePath    = "./tmp/data/data.zip"
 )
 
 type opts struct {
@@ -57,6 +58,8 @@ func main() {
 	}
 
 	app.SortDB()
+
+	runtime.GC()
 
 	app.Run(opts.listenAddr)
 }
