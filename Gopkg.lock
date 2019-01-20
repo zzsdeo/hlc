@@ -2,6 +2,14 @@
 
 
 [[projects]]
+  branch = "master"
+  digest = "1:c571d5dcbb54f322fc8d803394aef6dbb10ebb8092aa203140448f3d7d2b35b1"
+  name = "github.com/bcicen/jstream"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "c0250c3d449eeae44e390eaf1bc25bf7eebbb5e9"
+
+[[projects]]
   digest = "1:aaa8e0e7e35d92e21daed3f241832cee73d15ca1cd3302ba3843159a959a7eac"
   name = "github.com/klauspost/compress"
   packages = [
@@ -58,6 +66,7 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/bcicen/jstream",
     "github.com/mailru/easyjson",
     "github.com/mailru/easyjson/jlexer",
     "github.com/mailru/easyjson/jwriter",

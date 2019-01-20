@@ -23,6 +23,7 @@ type minData struct {
 type DB struct {
 	minData
 	mu *sync.Mutex
+	wg *sync.WaitGroup
 }
 
 type void struct{}
@@ -32,6 +33,7 @@ type M map[string]interface{}
 func NewDB() *DB {
 	return &DB{
 		mu: &sync.Mutex{},
+		wg: &sync.WaitGroup{},
 		minData: minData{
 			accountsMin: []models.AccountMin{},
 			fnames:      map[uint8]string{},
@@ -49,6 +51,7 @@ func (db *DB) LoadData(accounts []models.Account) {
 	//jobs := make(chan models.Account, len(accounts))
 	//numOfWorkers := 100
 	//for numOfWorkers >= 0 {
+	//	db.wg.Add(1)
 	//	go db.accountWorker(jobs)
 	//	numOfWorkers--
 	//}
@@ -63,19 +66,22 @@ func (db *DB) LoadData(accounts []models.Account) {
 }
 
 func (db *DB) SortDB() {
+	//db.wg.Wait()
 	sort.Slice(db.accountsMin, func(i, j int) bool {
 		return db.accountsMin[i].ID > db.accountsMin[j].ID
 	})
 	for _, a := range db.accountsMin[:10] {
 		log.Println(a.ID)
 	}
+	//log.Println("size", utils.Sizeof(db.accountsMin, db.interests, db.snames, db.cities, db.countries, db.fnames, db.sex, db.status))
 }
 
-//func (db *DB) accountWorker(jobs <-chan models.Account) {
-//	for j := range jobs {
-//		db.AddAccount(j)
-//	}
-//}
+func (db *DB) accountWorker(jobs <-chan models.Account) {
+	for j := range jobs {
+		db.AddAccount(j)
+	}
+	db.wg.Done()
+}
 
 func (db *DB) AddAccount(account models.Account) {
 	db.mu.Lock()
@@ -352,7 +358,6 @@ MainLoop:
 					}
 					continue MainLoop
 				}
-
 			case "premium_now":
 				if !accountMin.PremiumNow(v.(int)) {
 					continue MainLoop
@@ -418,4 +423,79 @@ MainLoop:
 
 	}
 	return accounts
+}
+
+func (db *DB) Group(query M) models.Groups {
+	limit := query["limit"].(int)
+	keys := query["keys"].([]string)
+	order := query["order"].(int)
+	groupsMap := make(map[string]models.Group)
+MainLoop:
+	for _, accountMin := range db.accountsMin {
+	InnerLoop:
+		for k, v := range query {
+			switch k {
+			case "sex":
+				if db.sex[accountMin.Sex] != v.(string) {
+					continue MainLoop
+				}
+			case "status":
+				if db.status[accountMin.Status] != v.(string) {
+					continue MainLoop
+				}
+			case "country":
+				if db.countries[accountMin.Country] != v.(string) {
+					continue MainLoop
+				}
+			case "city":
+				if db.cities[accountMin.City] != v.(string) {
+					continue MainLoop
+				}
+			case "birth":
+				if time.Unix(int64(accountMin.Birth), 0).Year() != v.(int) {
+					continue MainLoop
+				}
+			case "joined":
+				if time.Unix(int64(accountMin.Joined), 0).Year() != v.(int) {
+					continue MainLoop
+				}
+			case "interests":
+				for iii := range accountMin.Interests {
+					if db.interests[accountMin.Interests[iii]] == v.(string) {
+						continue InnerLoop
+					}
+				}
+				continue MainLoop
+			case "likes":
+				for iii := range accountMin.Likes {
+					if accountMin.Likes[iii].ID == v.(int) {
+						continue InnerLoop
+					}
+				}
+				continue MainLoop
+			}
+		}
+
+		var compositeKey string
+		unwind := false
+		for i := range keys {
+			switch keys[i] {
+			case "sex":
+				compositeKey += db.sex[accountMin.Sex]
+			case "status":
+				compositeKey += db.status[accountMin.Status]
+			case "interests":
+				unwind = true
+			case "country":
+				compositeKey += db.countries[accountMin.Country]
+			case "city":
+				compositeKey += db.cities[accountMin.City]
+			}
+		}
+
+		if !unwind {
+
+		}
+	}
+
 }

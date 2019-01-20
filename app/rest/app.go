@@ -13,10 +13,12 @@ import (
 )
 
 type queryKeys struct {
+	Sex               []byte
 	SexEq             []byte
 	EmailDomain       []byte
 	EmailLt           []byte
 	EmailGt           []byte
+	Status            []byte
 	StatusEq          []byte
 	StatusNeq         []byte
 	FNameEq           []byte
@@ -27,25 +29,34 @@ type queryKeys struct {
 	SNameNull         []byte
 	PhoneCode         []byte
 	PhoneNull         []byte
+	Country           []byte
 	CountryEq         []byte
 	CountryNull       []byte
+	City              []byte
 	CityEq            []byte
 	CityAny           []byte
 	CityNull          []byte
+	Joined            []byte
+	Birth             []byte
 	BirthLt           []byte
 	BirthGt           []byte
 	BirthYear         []byte
+	Interests         []byte
 	InterestsContains []byte
 	InterestsAny      []byte
+	Likes             []byte
 	LikesContains     []byte
 	PremiumNow        []byte
 	PremiumNull       []byte
 	Limit             []byte
 	QueryId           []byte
+	Order             []byte
+	Keys              []byte
 }
 
 type paths struct {
 	filterPath []byte
+	groupPath  []byte
 }
 
 type App struct {
@@ -76,11 +87,14 @@ func (a *App) Initialize(now int) {
 	a.mu = &sync.Mutex{}
 
 	a.filterPath = []byte("/accounts/filter/")
+	a.groupPath = []byte("/accounts/group/")
 
+	a.Sex = []byte("sex")
 	a.SexEq = []byte("sex_eq")
 	a.EmailDomain = []byte("email_domain")
 	a.EmailLt = []byte("email_lt")
 	a.EmailGt = []byte("email_gt")
+	a.Status = []byte("status")
 	a.StatusEq = []byte("status_eq")
 	a.StatusNeq = []byte("status_neq")
 	a.FNameEq = []byte("fname_eq")
@@ -91,26 +105,38 @@ func (a *App) Initialize(now int) {
 	a.SNameNull = []byte("sname_null")
 	a.PhoneCode = []byte("phone_code")
 	a.PhoneNull = []byte("phone_null")
+	a.Country = []byte("country")
 	a.CountryEq = []byte("country_eq")
 	a.CountryNull = []byte("country_null")
+	a.City = []byte("city")
 	a.CityEq = []byte("city_eq")
 	a.CityAny = []byte("city_any")
 	a.CityNull = []byte("city_null")
+	a.Joined = []byte("joined")
+	a.Birth = []byte("birth")
 	a.BirthLt = []byte("birth_lt")
 	a.BirthGt = []byte("birth_gt")
 	a.BirthYear = []byte("birth_year")
+	a.Interests = []byte("interests")
 	a.InterestsContains = []byte("interests_contains")
 	a.InterestsAny = []byte("interests_any")
+	a.Likes = []byte("likes")
 	a.LikesContains = []byte("likes_contains")
 	a.PremiumNow = []byte("premium_now")
 	a.PremiumNull = []byte("premium_null")
 	a.Limit = []byte("limit")
 	a.QueryId = []byte("query_id")
+	a.Order = []byte("order")
+	a.Keys = []byte("keys")
 }
 
 func (a *App) LoadData(accounts []models.Account) {
 	a.db.LoadData(accounts)
 	log.Println("[INFO] added ", len(accounts), " accounts")
+}
+
+func (a *App) AddAccount(account models.Account) {
+	a.db.AddAccount(account)
 }
 
 func (a *App) SortDB() {
@@ -141,31 +167,9 @@ func (a *App) Run(listenAddr string) {
 func (a *App) filter(ctx *fasthttp.RequestCtx) {
 	//defer utils.TimeTrack(time.Now(), ctx.QueryArgs().Peek("query_id"))
 	ctx.SetContentType("application/json")
-
-	if b, ok := a.cache[ctx.QueryArgs().GetUintOrZero("query_id")]; ok {
-		if string(b) != "-" {
-			_, err := ctx.Write(b)
-			if err != nil {
-				ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-				log.Println("[ERROR] ", err)
-				return
-			}
-
-			ctx.SetStatusCode(fasthttp.StatusOK)
-			return
-		}
-
-		_, err := ctx.Write([]byte{})
-		if err != nil {
-			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-			log.Println("[ERROR] ", err)
-			return
-		}
-
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+	if a.fromCache(ctx) {
 		return
 	}
-
 	query := store.M{}
 	isBadArg := false
 	ctx.QueryArgs().VisitAll(func(key, value []byte) {
@@ -337,6 +341,178 @@ func (a *App) filter(ctx *fasthttp.RequestCtx) {
 	a.mu.Unlock()
 
 	ctx.SetStatusCode(fasthttp.StatusOK)
+}
+
+func (a *App) group(ctx *fasthttp.RequestCtx) {
+	ctx.SetContentType("application/json")
+	if a.fromCache(ctx) {
+		return
+	}
+	query := store.M{}
+	isBadArg := false
+	ctx.QueryArgs().VisitAll(func(key, value []byte) {
+		if isBadArg {
+			return
+		} else if len(value) == 0 {
+			isBadArg = true
+			return
+		} else if bytes.Equal(key, a.Sex) {
+			query["sex"] = string(value)
+			return
+		} else if bytes.Equal(key, a.Status) {
+			query["status"] = string(value)
+			return
+		} else if bytes.Equal(key, a.Country) {
+			query["country"] = string(value)
+			return
+		} else if bytes.Equal(key, a.City) {
+			query["city"] = string(value)
+			return
+		} else if bytes.Equal(key, a.Birth) {
+			year, err := strconv.Atoi(string(value))
+			if err != nil {
+				log.Println("[ERROR] ", err)
+				isBadArg = true
+				return
+			}
+			query["birth"] = year
+			return
+		} else if bytes.Equal(key, a.Joined) {
+			year, err := strconv.Atoi(string(value))
+			if err != nil {
+				log.Println("[ERROR] ", err)
+				isBadArg = true
+				return
+			}
+			query["joined"] = year
+			return
+		} else if bytes.Equal(key, a.Interests) {
+			query["interests"] = string(value)
+			return
+		} else if bytes.Equal(key, a.Likes) {
+			likeId, err := strconv.Atoi(string(value))
+			if err != nil {
+				log.Println("[ERROR] ", err)
+				isBadArg = true
+				return
+			}
+			query["likes"] = likeId
+			return
+		} else if bytes.Equal(key, a.Limit) {
+			limit, err := strconv.Atoi(string(value))
+			if err != nil {
+				log.Println("[ERROR] ", err)
+				isBadArg = true
+				return
+			}
+			if limit < 0 {
+				isBadArg = true
+				return
+			}
+			query["limit"] = limit
+			return
+		} else if bytes.Equal(key, a.Order) {
+			order, err := strconv.Atoi(string(value))
+			if err != nil {
+				log.Println("[ERROR] ", err)
+				isBadArg = true
+				return
+			}
+
+			if order == 0 {
+				log.Println("[ERROR] ", err)
+				isBadArg = true
+				return
+			}
+
+			if order != -1 && order != 1 {
+				log.Println("[ERROR] ", err)
+				isBadArg = true
+				return
+			}
+			query["order"] = order
+			return
+		} else if bytes.Equal(key, a.Keys) {
+			keys := strings.Split(string(value), ",")
+			if len(keys) == 0 {
+				isBadArg = true
+				return
+			}
+			//validate keys
+			for i := range keys {
+				if _, ok := models.Keys[keys[i]]; !ok {
+					isBadArg = true
+					return
+				}
+			}
+			query["keys"] = keys
+			return
+		} else if bytes.Equal(key, a.QueryId) {
+			return
+		} else {
+			isBadArg = true
+			return
+		}
+	})
+
+	//log.Println("[DEBUG] query=", query)
+
+	if isBadArg {
+		a.mu.Lock()
+		a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = []byte("-")
+		a.mu.Unlock()
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		return
+	}
+
+	accounts := a.db.Find(query)
+
+	b, err := easyjson.Marshal(&accounts)
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		log.Println("[ERROR] ", err)
+		return
+	}
+
+	_, err = ctx.Write(b)
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		log.Println("[ERROR] ", err)
+		return
+	}
+
+	a.mu.Lock()
+	a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = b
+	a.mu.Unlock()
+
+	ctx.SetStatusCode(fasthttp.StatusOK)
+}
+
+func (a *App) fromCache(ctx *fasthttp.RequestCtx) bool {
+	if b, ok := a.cache[ctx.QueryArgs().GetUintOrZero("query_id")]; ok {
+		if string(b) != "-" {
+			_, err := ctx.Write(b)
+			if err != nil {
+				ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+				log.Println("[ERROR] ", err)
+				return true
+			}
+
+			ctx.SetStatusCode(fasthttp.StatusOK)
+			return true
+		}
+
+		_, err := ctx.Write([]byte{})
+		if err != nil {
+			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+			log.Println("[ERROR] ", err)
+			return true
+		}
+
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		return true
+	}
+	return false
 }
 
 //func (a *App) group(w http.ResponseWriter, r *http.Request) {

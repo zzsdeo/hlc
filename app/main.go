@@ -3,7 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bufio"
-	"github.com/mailru/easyjson"
+	"github.com/bcicen/jstream"
 	"hlc/app/models"
 	"hlc/app/rest"
 	"log"
@@ -16,16 +16,14 @@ const (
 	listenAddrEnvName = "SERVER_ADDR"
 	defaultListenAddr = ":80"
 
-	optionsFilePath = "/tmp/data/options.txt" //todo docker
-	dataFilePath    = "/tmp/data/data.zip"
-
-	//dataPath    = "/tmp/data/data/"
+	//optionsFilePath = "/tmp/data/options.txt" //todo docker
+	//dataFilePath    = "/tmp/data/data.zip"
 
 	//optionsFilePath = "/home/zzsdeo/tmp/data/options.txt" //todo hp
 	//dataFilePath    = "/home/zzsdeo/tmp/data/data.zip"
 
-	//optionsFilePath = "./tmp/data/options.txt" //todo home
-	//dataFilePath    = "./tmp/data/data.zip"
+	optionsFilePath = "./tmp/data/options.txt" //todo home
+	dataFilePath    = "./tmp/data/data.zip"
 )
 
 type opts struct {
@@ -40,22 +38,7 @@ func main() {
 
 	app.Initialize(opts.now)
 
-	r, err := readZip()
-	if err != nil {
-		log.Fatal("[ERROR] ", err)
-	}
-
-	for _, file := range r.File {
-		data, err := parseData(file)
-		if err != nil {
-			log.Fatal("[ERROR] ", err)
-		}
-		app.LoadData(data.Accounts)
-	}
-	err = r.Close()
-	if err != nil {
-		log.Fatal("[ERROR] ", err)
-	}
+	parseData(app)
 
 	app.SortDB()
 
@@ -91,30 +74,91 @@ func parseOpts() opts {
 	return opts
 }
 
-func readZip() (*zip.ReadCloser, error) {
+func parseData(app rest.App) {
 	r, err := zip.OpenReader(dataFilePath)
 	if err != nil {
-		return nil, err
+		log.Fatal(err)
 	}
-	return r, nil
-}
 
-func parseData(f *zip.File) (models.Accounts, error) {
-	accounts := models.Accounts{}
-	file, err := f.Open()
+	for _, zf := range r.File {
+		file, err := zf.Open()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		decoder := jstream.NewDecoder(file, 2)
+		var fname, sname, phone, country, city string
+		var interests []string
+		var premium *models.Premium
+		var likes []models.Like
+		for mv := range decoder.Stream() {
+			accMap := mv.Value.(map[string]interface{})
+			fname, sname, phone, country, city = "", "", "", "", ""
+			if v, ok := accMap["fname"]; ok {
+				fname = v.(string)
+			}
+			if v, ok := accMap["sname"]; ok {
+				sname = v.(string)
+			}
+			if v, ok := accMap["phone"]; ok {
+				phone = v.(string)
+			}
+			if v, ok := accMap["country"]; ok {
+				country = v.(string)
+			}
+			if v, ok := accMap["city"]; ok {
+				city = v.(string)
+			}
+			interests = []string{}
+			if _, ok := accMap["interests"]; ok {
+				for _, interest := range accMap["interests"].([]interface{}) {
+					interests = append(interests, interest.(string))
+				}
+			}
+			premium = nil
+			if premMap, ok := accMap["premium"]; ok {
+				premium = &models.Premium{
+					Start:  int(premMap.(map[string]interface{})["start"].(float64)),
+					Finish: int(premMap.(map[string]interface{})["finish"].(float64)),
+				}
+			}
+			likes = []models.Like{}
+			if likeMap, ok := accMap["likes"]; ok {
+				for _, l := range likeMap.([]interface{}) {
+					likes = append(likes, models.Like{
+						ID: int(l.(map[string]interface{})["id"].(float64)),
+						TS: int(l.(map[string]interface{})["ts"].(float64)),
+					})
+				}
+			}
+			app.AddAccount(models.Account{
+				ID:        int(accMap["id"].(float64)),
+				Email:     accMap["email"].(string),
+				FName:     fname,
+				SName:     sname,
+				Phone:     phone,
+				Sex:       accMap["sex"].(string),
+				Birth:     int(accMap["birth"].(float64)),
+				Country:   country,
+				City:      city,
+				Joined:    int(accMap["joined"].(float64)),
+				Status:    accMap["status"].(string),
+				Interests: interests,
+				Premium:   premium,
+				Likes:     likes,
+			})
+		}
+
+		runtime.GC()
+
+		err = file.Close()
+		if err != nil {
+			log.Println("[ERROR] ", err)
+		}
+	}
+
+	err = r.Close()
 	if err != nil {
-		return accounts, err
+		log.Fatal(err)
 	}
-
-	err = easyjson.UnmarshalFromReader(file, &accounts)
-	if err != nil {
-		return accounts, err
-	}
-
-	err = file.Close()
-	if err != nil {
-		log.Println("[ERROR] ", err)
-	}
-
-	return accounts, nil
 }
