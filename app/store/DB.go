@@ -429,7 +429,7 @@ func (db *DB) Group(query M) models.Groups {
 	limit := query["limit"].(int)
 	keys := query["keys"].([]string)
 	order := query["order"].(int)
-	groupsMap := make(map[string]models.Group)
+	groupsMap := make(map[models.Group]int)
 MainLoop:
 	for _, accountMin := range db.accountsMin {
 	InnerLoop:
@@ -476,26 +476,116 @@ MainLoop:
 			}
 		}
 
-		var compositeKey string
 		unwind := false
+		group := models.Group{}
 		for i := range keys {
 			switch keys[i] {
 			case "sex":
-				compositeKey += db.sex[accountMin.Sex]
+				group.Sex = db.sex[accountMin.Sex]
 			case "status":
-				compositeKey += db.status[accountMin.Status]
+				group.Status = db.status[accountMin.Status]
 			case "interests":
 				unwind = true
 			case "country":
-				compositeKey += db.countries[accountMin.Country]
+				group.Country = db.countries[accountMin.Country]
 			case "city":
-				compositeKey += db.cities[accountMin.City]
+				group.City = db.cities[accountMin.City]
 			}
 		}
 
 		if !unwind {
-
+			groupsMap[group]++
+		} else {
+			for i := range accountMin.Interests {
+				group.Interests = db.interests[accountMin.Interests[i]]
+				groupsMap[group]++
+			}
 		}
 	}
 
+	result := models.Groups{}
+	result.Groups = []models.Group{}
+
+	for k, v := range groupsMap {
+		k.Count = v
+		result.Groups = append(result.Groups, k)
+	}
+
+	if order == 1 {
+		sort.Slice(result.Groups, func(i, j int) bool {
+			if result.Groups[i].Count == result.Groups[j].Count {
+				for k := range keys {
+					switch keys[k] {
+					case "sex":
+						if result.Groups[i].Sex == result.Groups[j].Sex {
+							continue
+						}
+						return result.Groups[i].Sex < result.Groups[j].Sex
+					case "status":
+						if result.Groups[i].Status == result.Groups[j].Status {
+							continue
+						}
+						return result.Groups[i].Status < result.Groups[j].Status
+					case "interests":
+						if result.Groups[i].Interests == result.Groups[j].Interests {
+							continue
+						}
+						return result.Groups[i].Interests < result.Groups[j].Interests
+					case "country":
+						if result.Groups[i].Country == result.Groups[j].Country {
+							continue
+						}
+						return result.Groups[i].Country < result.Groups[j].Country
+					case "city":
+						if result.Groups[i].City == result.Groups[j].City {
+							continue
+						}
+						return result.Groups[i].City < result.Groups[j].City
+					}
+				}
+			}
+			return result.Groups[i].Count < result.Groups[j].Count
+		})
+	} else {
+		sort.Slice(result.Groups, func(i, j int) bool {
+			if result.Groups[i].Count == result.Groups[j].Count {
+				for k := range keys {
+					switch keys[k] {
+					case "sex":
+						if result.Groups[i].Sex == result.Groups[j].Sex {
+							continue
+						}
+						return result.Groups[i].Sex > result.Groups[j].Sex
+					case "status":
+						if result.Groups[i].Status == result.Groups[j].Status {
+							continue
+						}
+						return result.Groups[i].Status > result.Groups[j].Status
+					case "interests":
+						if result.Groups[i].Interests == result.Groups[j].Interests {
+							continue
+						}
+						return result.Groups[i].Interests > result.Groups[j].Interests
+					case "country":
+						if result.Groups[i].Country == result.Groups[j].Country {
+							continue
+						}
+						return result.Groups[i].Country > result.Groups[j].Country
+					case "city":
+						if result.Groups[i].City == result.Groups[j].City {
+							continue
+						}
+						return result.Groups[i].City > result.Groups[j].City
+					}
+				}
+			}
+			return result.Groups[i].Count > result.Groups[j].Count
+		})
+	}
+
+	if len(result.Groups) > limit {
+		result.Groups = result.Groups[:limit]
+	}
+
+	return result
 }

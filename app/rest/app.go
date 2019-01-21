@@ -73,6 +73,8 @@ func (a *App) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 	if ctx.IsGet() {
 		if bytes.Equal(ctx.Path(), a.filterPath) {
 			a.filter(ctx)
+		} else if bytes.Equal(ctx.Path(), a.groupPath) {
+			a.group(ctx)
 		}
 	} else {
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
@@ -465,9 +467,9 @@ func (a *App) group(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	accounts := a.db.Find(query)
+	groups := a.db.Group(query)
 
-	b, err := easyjson.Marshal(&accounts)
+	b, err := easyjson.Marshal(&groups)
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		log.Println("[ERROR] ", err)
