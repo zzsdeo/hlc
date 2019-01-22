@@ -75,6 +75,8 @@ func (a *App) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 			a.filter(ctx)
 		} else if bytes.Equal(ctx.Path(), a.groupPath) {
 			a.group(ctx)
+		} else {
+			ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		}
 	} else {
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)

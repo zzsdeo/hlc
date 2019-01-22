@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 )
 
 type minData struct {
@@ -325,10 +324,11 @@ MainLoop:
 				}
 				projection["birth"] = void{}
 			case "birth_year":
-				if time.Unix(int64(accountMin.Birth), 0).Year() != v.(int) {
-					continue MainLoop
+				if accountMin.CheckBirth(v.(int)) {
+					projection["birth"] = void{}
+					continue InnerLoop
 				}
-				projection["birth"] = void{}
+				continue MainLoop
 			case "interests_contains":
 			InterestsContainsLoop:
 				for ii := range v.([]string) {
@@ -452,13 +452,15 @@ MainLoop:
 					continue MainLoop
 				}
 			case "birth":
-				if time.Unix(int64(accountMin.Birth), 0).Year() != v.(int) {
-					continue MainLoop
+				if accountMin.CheckBirth(v.(int)) {
+					continue InnerLoop
 				}
+				continue MainLoop
 			case "joined":
-				if time.Unix(int64(accountMin.Joined), 0).Year() != v.(int) {
-					continue MainLoop
+				if accountMin.CheckJoined(v.(int)) {
+					continue InnerLoop
 				}
+				continue MainLoop
 			case "interests":
 				for iii := range accountMin.Interests {
 					if db.interests[accountMin.Interests[iii]] == v.(string) {
@@ -501,6 +503,7 @@ MainLoop:
 				groupsMap[group]++
 			}
 		}
+
 	}
 
 	result := models.Groups{}
