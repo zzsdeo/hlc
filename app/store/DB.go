@@ -593,7 +593,10 @@ MainLoop:
 	return result
 }
 
-func (db *DB) Recommend(id int, query M) {
+func (db *DB) Recommend(id, now int, query M) (models.Accounts, bool) {
+	accounts := models.Accounts{}
+	accounts.Accounts = []models.Account{}
+
 	i := sort.Search(len(db.accountsMin), func(i int) bool {
 		return db.accountsMin[i].ID <= id
 	})
@@ -603,7 +606,7 @@ func (db *DB) Recommend(id int, query M) {
 	if i < len(db.accountsMin) && db.accountsMin[i].ID == id {
 		accountMinForFind = db.accountsMin[i]
 	} else {
-		//todo not found
+		return accounts, false
 	}
 
 	var accountsMin []models.AccountMin
@@ -614,13 +617,58 @@ MainLoop:
 			continue MainLoop
 		}
 
-		//for ii := range accountMinForFind.Interests {
-		//	for iii := range accountMin.Interests {
-		//		if accountMin.Interests[iii] == accountMinForFind.Interests[ii] {
-		//			continue InnerLoop
-		//		}
-		//	}
-		//}
-		//continue MainLoop
+		for k, v := range query {
+			switch k {
+			case "city":
+				if db.cities[accountMin.City] != v.(string) {
+					continue MainLoop
+				}
+			case "country":
+				if db.countries[accountMin.Country] != v.(string) {
+					continue MainLoop
+				}
+			}
+		}
+
+		found := false
+		for ii := range accountMinForFind.Interests {
+			for iii := range accountMin.Interests {
+				if accountMin.Interests[iii] == accountMinForFind.Interests[ii] {
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			continue MainLoop
+		}
+
+		accountsMin = append(accountsMin, accountMin)
 	}
+
+	sort.Slice(accountsMin, func(i, j int) bool {
+		compi := accountMinForFind.CheckCompatibility(accountsMin[i], now)
+		compj := accountMinForFind.CheckCompatibility(accountsMin[j], now)
+		if compi == compj {
+			return accountsMin[i].ID < accountsMin[j].ID
+		}
+		return compi > compj
+	})
+
+	for i := 0; i < query["limit"].(int) && i < len(accountsMin); i++ {
+		accounts.Accounts = append(accounts.Accounts, models.Account{
+			ID:      accountsMin[i].ID,
+			Email:   accountsMin[i].Email,
+			Status:  db.status[accountsMin[i].Status],
+			FName:   db.fnames[accountsMin[i].FName],
+			SName:   db.snames[accountsMin[i].SName],
+			Birth:   accountsMin[i].Birth,
+			Premium: accountsMin[i].Premium,
+		})
+	}
+
+	return accounts, true
 }

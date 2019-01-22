@@ -75,6 +75,8 @@ func (a *App) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 			a.filter(ctx)
 		} else if bytes.Equal(ctx.Path(), a.groupPath) {
 			a.group(ctx)
+		} else if strings.HasSuffix(string(ctx.Path()), "/recommend/") {
+			a.recommend(ctx)
 		} else {
 			ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		}
@@ -492,31 +494,152 @@ func (a *App) group(ctx *fasthttp.RequestCtx) {
 	ctx.SetStatusCode(fasthttp.StatusOK)
 }
 
+func (a *App) recommend(ctx *fasthttp.RequestCtx) {
+	ctx.SetContentType("application/json")
+	if a.fromCache(ctx) {
+		return
+	}
+
+	id, err := strconv.Atoi(strings.Trim(string(ctx.Path()), "/accounts//recommend/"))
+	if err != nil {
+		a.mu.Lock()
+		a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = []byte("-")
+		a.mu.Unlock()
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		return
+	}
+
+	query := store.M{}
+	isBadArg := false
+	ctx.QueryArgs().VisitAll(func(key, value []byte) {
+		if isBadArg {
+			return
+		} else if len(value) == 0 {
+			isBadArg = true
+			return
+		} else if bytes.Equal(key, a.Country) {
+			query["country"] = string(value)
+			return
+		} else if bytes.Equal(key, a.City) {
+			query["city"] = string(value)
+			return
+		} else if bytes.Equal(key, a.Limit) {
+			limit, err := strconv.Atoi(string(value))
+			if err != nil {
+				log.Println("[ERROR] ", err)
+				isBadArg = true
+				return
+			}
+			if limit < 0 {
+				isBadArg = true
+				return
+			}
+			query["limit"] = limit
+			return
+		} else if bytes.Equal(key, a.QueryId) {
+			return
+		} else {
+			isBadArg = true
+			return
+		}
+	})
+
+	if isBadArg {
+		a.mu.Lock()
+		a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = []byte("-")
+		a.mu.Unlock()
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		return
+	}
+
+	accounts, ok := a.db.Recommend(id, a.now, query)
+	if !ok {
+		a.mu.Lock()
+		a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = []byte("?")
+		a.mu.Unlock()
+		ctx.SetStatusCode(fasthttp.StatusNotFound)
+		return
+	}
+
+	b, err := easyjson.Marshal(&accounts)
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		log.Println("[ERROR] ", err)
+		return
+	}
+
+	_, err = ctx.Write(b)
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		log.Println("[ERROR] ", err)
+		return
+	}
+
+	a.mu.Lock()
+	a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = b
+	a.mu.Unlock()
+
+	ctx.SetStatusCode(fasthttp.StatusOK)
+}
+
 func (a *App) fromCache(ctx *fasthttp.RequestCtx) bool {
 	if b, ok := a.cache[ctx.QueryArgs().GetUintOrZero("query_id")]; ok {
-		if string(b) != "-" {
+		switch string(b) {
+		case "-":
+			_, err := ctx.Write([]byte{})
+			if err != nil {
+				ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+				log.Println("[ERROR] ", err)
+				return true
+			}
+			ctx.SetStatusCode(fasthttp.StatusBadRequest)
+			return true
+		case "?":
+			_, err := ctx.Write([]byte{})
+			if err != nil {
+				ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+				log.Println("[ERROR] ", err)
+				return true
+			}
+			ctx.SetStatusCode(fasthttp.StatusNotFound)
+			return true
+		default:
 			_, err := ctx.Write(b)
 			if err != nil {
 				ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 				log.Println("[ERROR] ", err)
 				return true
 			}
-
 			ctx.SetStatusCode(fasthttp.StatusOK)
 			return true
 		}
-
-		_, err := ctx.Write([]byte{})
-		if err != nil {
-			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-			log.Println("[ERROR] ", err)
-			return true
-		}
-
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		return true
 	}
 	return false
+
+	//if b, ok := a.cache[ctx.QueryArgs().GetUintOrZero("query_id")]; ok {
+	//	if string(b) != "-" {
+	//		_, err := ctx.Write(b)
+	//		if err != nil {
+	//			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+	//			log.Println("[ERROR] ", err)
+	//			return true
+	//		}
+	//
+	//		ctx.SetStatusCode(fasthttp.StatusOK)
+	//		return true
+	//	}
+	//
+	//	_, err := ctx.Write([]byte{})
+	//	if err != nil {
+	//		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+	//		log.Println("[ERROR] ", err)
+	//		return true
+	//	}
+	//
+	//	ctx.SetStatusCode(fasthttp.StatusBadRequest)
+	//	return true
+	//}
+	//return false
 }
 
 //

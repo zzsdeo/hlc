@@ -44,3 +44,36 @@ func (a *AccountMin) CheckJoined(year int) bool {
 	}
 	return false
 }
+
+func (a *AccountMin) CheckCompatibility(account AccountMin, now int) int {
+	var compatibility int
+	if account.Birth > a.Birth {
+		compatibility = 1000000000 - account.Birth + a.Birth
+	} else {
+		compatibility = 1000000000 - a.Birth + account.Birth
+	}
+
+	for i := range account.Interests {
+		for ii := range a.Interests {
+			if account.Interests[i] == a.Interests[ii] {
+				compatibility += 10000000000
+				break
+			}
+		}
+	}
+
+	switch account.Status {
+	case 0:
+		compatibility += 300000000000
+	case 2:
+		compatibility += 200000000000
+	case 1:
+		compatibility += 100000000000
+	}
+
+	if account.PremiumNow(now) {
+		compatibility += 1000000000000
+	}
+
+	return compatibility
+}
