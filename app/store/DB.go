@@ -592,3 +592,35 @@ MainLoop:
 
 	return result
 }
+
+func (db *DB) Recommend(id int, query M) {
+	i := sort.Search(len(db.accountsMin), func(i int) bool {
+		return db.accountsMin[i].ID <= id
+	})
+
+	var accountMinForFind models.AccountMin
+
+	if i < len(db.accountsMin) && db.accountsMin[i].ID == id {
+		accountMinForFind = db.accountsMin[i]
+	} else {
+		//todo not found
+	}
+
+	var accountsMin []models.AccountMin
+
+MainLoop:
+	for _, accountMin := range db.accountsMin {
+		if accountMin.Sex == accountMinForFind.Sex {
+			continue MainLoop
+		}
+
+		//for ii := range accountMinForFind.Interests {
+		//	for iii := range accountMin.Interests {
+		//		if accountMin.Interests[iii] == accountMinForFind.Interests[ii] {
+		//			continue InnerLoop
+		//		}
+		//	}
+		//}
+		//continue MainLoop
+	}
+}
