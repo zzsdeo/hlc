@@ -1,12 +1,12 @@
-package rest
+package store
 
 import (
 	"hlc/app/models"
 	"sync"
 )
 
-func merge(s []models.Account, middle int, a models.Account) {
-	helper := make([]models.Account, len(s))
+func merge(s []models.AccountMin, middle int, a models.AccountMin) {
+	helper := make([]models.AccountMin, len(s))
 	copy(helper, s)
 
 	helperLeft := 0
@@ -32,7 +32,7 @@ func merge(s []models.Account, middle int, a models.Account) {
 	}
 }
 
-func parallelMergeSort(s []models.Account, a models.Account) {
+func parallelMergeSort(s []models.AccountMin, a models.AccountMin) {
 	length := len(s)
 
 	if length > 1 {

@@ -77,8 +77,10 @@ func (a *App) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 			a.group(ctx)
 		} else if strings.HasSuffix(string(ctx.Path()), "/recommend/") {
 			a.recommend(ctx)
+		} else if strings.HasSuffix(string(ctx.Path()), "/suggest/") {
+			a.suggest(ctx)
 		} else {
-			ctx.SetStatusCode(fasthttp.StatusBadRequest)
+			ctx.SetStatusCode(fasthttp.StatusNotFound)
 		}
 	} else {
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
@@ -155,20 +157,6 @@ func (a *App) Run(listenAddr string) {
 	log.Println("[INFO] start server on", listenAddr)
 	log.Fatal("[ERROR] ", fasthttp.ListenAndServe(listenAddr, a.HandleFastHTTP))
 }
-
-//func (a *App) initializeRoutes() {
-//	a.router.HandleFunc("/accounts/filter/", a.filter).Methods(http.MethodGet)
-//	//a.router.HandleFunc("/accounts/group/", a.group).Methods(http.MethodGet)
-//	//a.router.HandleFunc("/accounts/{id}/recommend/", a.recommend).Methods(http.MethodGet)
-//	//a.router.HandleFunc("/accounts/{id}/suggest/", a.suggest).Methods(http.MethodGet)
-//
-//	// Регистрация pprof-обработчиков
-//	//a.router.HandleFunc("/debug/pprof/", pprof.Index)
-//	//a.router.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-//	//a.router.HandleFunc("/debug/pprof/profile", pprof.Profile)
-//	//a.router.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-//	//a.router.HandleFunc("/debug/pprof/trace", pprof.Trace)
-//}
 
 func (a *App) filter(ctx *fasthttp.RequestCtx) {
 	//defer utils.TimeTrack(time.Now(), ctx.QueryArgs().Peek("query_id"))
@@ -302,7 +290,7 @@ func (a *App) filter(ctx *fasthttp.RequestCtx) {
 				isBadArg = true
 				return
 			}
-			if limit < 0 {
+			if limit <= 0 {
 				isBadArg = true
 				return
 			}
@@ -411,7 +399,7 @@ func (a *App) group(ctx *fasthttp.RequestCtx) {
 				isBadArg = true
 				return
 			}
-			if limit < 0 {
+			if limit <= 0 {
 				isBadArg = true
 				return
 			}
@@ -530,7 +518,7 @@ func (a *App) recommend(ctx *fasthttp.RequestCtx) {
 				isBadArg = true
 				return
 			}
-			if limit < 0 {
+			if limit <= 0 {
 				isBadArg = true
 				return
 			}
@@ -553,6 +541,94 @@ func (a *App) recommend(ctx *fasthttp.RequestCtx) {
 	}
 
 	accounts, ok := a.db.Recommend(id, a.now, query)
+	if !ok {
+		a.mu.Lock()
+		a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = []byte("?")
+		a.mu.Unlock()
+		ctx.SetStatusCode(fasthttp.StatusNotFound)
+		return
+	}
+
+	b, err := easyjson.Marshal(&accounts)
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		log.Println("[ERROR] ", err)
+		return
+	}
+
+	_, err = ctx.Write(b)
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		log.Println("[ERROR] ", err)
+		return
+	}
+
+	a.mu.Lock()
+	a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = b
+	a.mu.Unlock()
+
+	ctx.SetStatusCode(fasthttp.StatusOK)
+}
+
+func (a *App) suggest(ctx *fasthttp.RequestCtx) {
+	ctx.SetContentType("application/json")
+	if a.fromCache(ctx) {
+		return
+	}
+
+	id, err := strconv.Atoi(strings.Trim(string(ctx.Path()), "/accounts//suggest/"))
+	if err != nil {
+		a.mu.Lock()
+		a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = []byte("-")
+		a.mu.Unlock()
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		return
+	}
+
+	query := store.M{}
+	isBadArg := false
+	ctx.QueryArgs().VisitAll(func(key, value []byte) {
+		if isBadArg {
+			return
+		} else if len(value) == 0 {
+			isBadArg = true
+			return
+		} else if bytes.Equal(key, a.Country) {
+			query["country"] = string(value)
+			return
+		} else if bytes.Equal(key, a.City) {
+			query["city"] = string(value)
+			return
+		} else if bytes.Equal(key, a.Limit) {
+			limit, err := strconv.Atoi(string(value))
+			if err != nil {
+				log.Println("[ERROR] ", err)
+				isBadArg = true
+				return
+			}
+			if limit <= 0 {
+				isBadArg = true
+				return
+			}
+			query["limit"] = limit
+			return
+		} else if bytes.Equal(key, a.QueryId) {
+			return
+		} else {
+			isBadArg = true
+			return
+		}
+	})
+
+	if isBadArg {
+		a.mu.Lock()
+		a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = []byte("-")
+		a.mu.Unlock()
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		return
+	}
+
+	accounts, ok := a.db.Suggest(id, query)
 	if !ok {
 		a.mu.Lock()
 		a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = []byte("?")
@@ -641,271 +717,3 @@ func (a *App) fromCache(ctx *fasthttp.RequestCtx) bool {
 	//}
 	//return false
 }
-
-//
-//func (a *App) recommend(w http.ResponseWriter, r *http.Request) {
-//	w.Header().Set("Content-Type", "application/json")
-//
-//	id, err := strconv.Atoi(mux.Vars(r)["id"])
-//	if err != nil {
-//		w.WriteHeader(http.StatusBadRequest)
-//		return
-//	}
-//
-//	session := a.mongoSession.Copy()
-//	defer session.Close()
-//	collection := session.DB(dbName).C(accountsCollectionName)
-//
-//	account := models.Account{}
-//	err = collection.Find(bson.M{"id": id}).Select(bson.M{
-//		"sex":       1,
-//		"birth":     1,
-//		"interests": 1}).One(&account)
-//	if err != nil {
-//		log.Println("[ERROR] ", err)
-//		if err == mgo.ErrNotFound {
-//			w.WriteHeader(http.StatusNotFound)
-//			return
-//		}
-//	}
-//
-//	query := bson.M{"sex": "f"}
-//	if account.Sex == "f" {
-//		query["sex"] = "m"
-//	}
-//
-//	query["interests"] = bson.M{"$elemMatch": bson.M{"$in": account.Interests}}
-//
-//	var limit int
-//	for k, v := range r.URL.Query() {
-//		if v[0] == "" {
-//			w.WriteHeader(http.StatusBadRequest)
-//			return
-//		}
-//		switch k {
-//		case "country":
-//			query["country"] = v[0]
-//			continue
-//		case "city":
-//			query["city"] = v[0]
-//			continue
-//		case "limit":
-//			var err error
-//			limit, err = strconv.Atoi(v[0])
-//			if err != nil {
-//				log.Println("[ERROR] ", err)
-//				w.WriteHeader(http.StatusBadRequest)
-//				return
-//			}
-//			if limit < 0 {
-//				w.WriteHeader(http.StatusBadRequest)
-//				return
-//			}
-//			continue
-//		case "query_id":
-//			continue
-//		default:
-//			w.WriteHeader(http.StatusBadRequest)
-//			return
-//		}
-//	}
-//
-//	accounts := models.Accounts{}
-//	accounts.Accounts = make([]models.Account, 0)
-//
-//	err = collection.Find(query).Select(bson.M{
-//		"id":        1,
-//		"email":     1,
-//		"status":    1,
-//		"fname":     1,
-//		"sname":     1,
-//		"birth":     1,
-//		"premium":   1,
-//		"interests": 1}).All(&accounts.Accounts)
-//	if err != nil {
-//		log.Println("[ERROR] ", err)
-//	}
-//
-//	account.PrepareInterestsMap()
-//	sort.Slice(accounts.Accounts, func(i, j int) bool {
-//		return account.CheckCompatibility(accounts.Accounts[i], a.now) > account.CheckCompatibility(accounts.Accounts[j], a.now)
-//	})
-//
-//	if len(accounts.Accounts) > limit {
-//		accounts.Accounts = accounts.Accounts[:limit]
-//	}
-//
-//	for i, _ := range accounts.Accounts {
-//		accounts.Accounts[i].Interests = []string{}
-//	}
-//
-//	err = json.NewEncoder(w).Encode(accounts)
-//	if err != nil {
-//		w.WriteHeader(http.StatusInternalServerError)
-//		log.Println("[ERROR] ", err)
-//	}
-//}
-//
-//func (a *App) suggest(w http.ResponseWriter, r *http.Request) {
-//	w.Header().Set("Content-Type", "application/json")
-//
-//	id, err := strconv.Atoi(mux.Vars(r)["id"])
-//	if err != nil {
-//		w.WriteHeader(http.StatusBadRequest)
-//		return
-//	}
-//
-//	session := a.mongoSession.Copy()
-//	defer session.Close()
-//	collection := session.DB(dbName).C(accountsCollectionName)
-//
-//	account := models.Account{}
-//	err = collection.Find(bson.M{"id": id}).Select(bson.M{
-//		"sex":   1,
-//		"likes": 1}).One(&account)
-//	if err != nil {
-//		log.Println("[ERROR] ", err)
-//		if err == mgo.ErrNotFound {
-//			w.WriteHeader(http.StatusNotFound)
-//			return
-//		}
-//	}
-//
-//	query := bson.M{"sex": account.Sex}
-//
-//	var limit int
-//	for k, v := range r.URL.Query() {
-//		if v[0] == "" {
-//			w.WriteHeader(http.StatusBadRequest)
-//			return
-//		}
-//		switch k {
-//		case "country":
-//			query["country"] = v[0]
-//			continue
-//		case "city":
-//			query["city"] = v[0]
-//			continue
-//		case "limit":
-//			var err error
-//			limit, err = strconv.Atoi(v[0])
-//			if err != nil {
-//				log.Println("[ERROR] ", err)
-//				w.WriteHeader(http.StatusBadRequest)
-//				return
-//			}
-//			if limit < 0 {
-//				w.WriteHeader(http.StatusBadRequest)
-//				return
-//			}
-//			continue
-//		case "query_id":
-//			continue
-//		default:
-//			w.WriteHeader(http.StatusBadRequest)
-//			return
-//		}
-//	}
-//
-//	likeIds := make([]int, 0)
-//	for _, like := range account.Likes {
-//		likeIds = append(likeIds, like.ID)
-//	}
-//	query["likes"] = bson.M{"$elemMatch": bson.M{"id": bson.M{"$in": likeIds}}}
-//
-//	accounts := models.Accounts{}
-//	accounts.Accounts = make([]models.Account, 0)
-//
-//	err = collection.Find(query).Select(bson.M{"likes": 1}).All(&accounts.Accounts)
-//	if err != nil {
-//		log.Println("[ERROR] ", err)
-//	}
-//
-//	account.PrepareLikesMap()
-//	//sort.Slice(accounts.Accounts, func(i, j int) bool {
-//	//	return account.CheckSimilarity(accounts.Accounts[i]) > account.CheckSimilarity(accounts.Accounts[j])
-//	//})
-//	parallelMergeSort(accounts.Accounts, account)
-//
-//	//ids := make([]int, 0)
-//	//for _, a := range accounts.Accounts {
-//	//	//log.Println(account.CheckSimilarity(a))todo
-//	//	if account.CheckSimilarity(a) == 0 {
-//	//		break
-//	//	}
-//	//	ids = append(ids, account.GetNewIds(a)...)
-//	//}
-//	//
-//	//err = collection.Find(bson.M{"id": bson.M{"$in":ids}}).Select(bson.M{
-//	//	"id":1,
-//	//	"email":1,
-//	//	"status":1,
-//	//	"fname":1,
-//	//	"sname":1}).All(&accounts.Accounts)
-//	//if err != nil {
-//	//	log.Println("[ERROR] ", err)
-//	//}
-//	//
-//	//result := models.Accounts{}
-//	//result.Accounts = make([]models.Account, 0)
-//	//for i:= 0; i < limit; i++ {
-//	//	tempAccount, err := accounts.ExtractAccountByID(ids[i])
-//	//	if err != nil {
-//	//		log.Println("[ERROR] ", err)
-//	//		continue
-//	//	}
-//	//	result.Accounts = append(result.Accounts, tempAccount)
-//	//}
-//	//
-//	//err = json.NewEncoder(w).Encode(result)
-//	//if err != nil {
-//	//	w.WriteHeader(http.StatusInternalServerError)
-//	//	log.Println("[ERROR] ", err)
-//	//}
-//
-//	//if len(accounts.Accounts) > limit {
-//	//	accounts.Accounts = accounts.Accounts[:limit]
-//	//}
-//
-//	ids := make([]int, 0)
-//	for _, a := range accounts.Accounts {
-//		ids = append(ids, account.GetNewIds(a)...)
-//		if len(ids) > limit {
-//			ids = ids[:limit]
-//			break
-//		}
-//	}
-//
-//	err = collection.Find(bson.M{"id": bson.M{"$in": ids}}).Select(bson.M{
-//		"id":     1,
-//		"email":  1,
-//		"status": 1,
-//		"fname":  1,
-//		"sname":  1}).Sort("-id").All(&accounts.Accounts)
-//	if err != nil {
-//		log.Println("[ERROR] ", err)
-//	}
-//
-//	err = json.NewEncoder(w).Encode(accounts)
-//	if err != nil {
-//		w.WriteHeader(http.StatusInternalServerError)
-//		log.Println("[ERROR] ", err)
-//	}
-//}
-//
-//func exists(v string) bson.M {
-//	switch v {
-//	case "0":
-//		return bson.M{"$exists": true}
-//	case "1":
-//		return bson.M{"$exists": false}
-//	}
-//	return nil
-//}
-//
-//func yearInterval(year int) bson.M {
-//	return bson.M{
-//		"$gte": time.Date(year, time.January, 1, 0, 0, 0, 0, time.UTC).Unix(),
-//		"$lt":  time.Date(year+1, time.January, 1, 0, 0, 0, 0, time.UTC).Unix(),
-//	}
-//}
