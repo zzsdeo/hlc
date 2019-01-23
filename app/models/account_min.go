@@ -20,8 +20,7 @@ type AccountMin struct {
 	Status    byte    //0-"свободны", 1-"заняты", 2-"всё сложно"
 	Interests []uint8 //every string is up to 100 symbols, optional
 	Premium   *Premium
-	Likes     []Like
-	likesMap  map[int][]int
+	LikesMap  map[int][]int
 }
 
 func (a *AccountMin) PremiumNow(now int) bool {
@@ -83,78 +82,12 @@ func (a *AccountMin) CheckCompatibility(account AccountMin, now int) int {
 	return compatibility
 }
 
-//func (a *AccountMin) CheckSimilarity(account AccountMin) float64 {
-//	var similarity float64
-//	var avrLikes, avrMyLikes, n float64
-//	for i := range account.Likes {
-//		avrLikes, avrMyLikes, n = 0, 0, 0
-//		for ii := range a.Likes {
-//			if account.Likes[i].ID == a.Likes[ii].ID {
-//				n++
-//				avrMyLikes += float64(a.Likes[ii].TS)
-//				avrLikes += float64(account.Likes[i].TS)
-//			}
-//		}
-//		avrMyLikes /= n
-//		avrLikes /= n
-//
-//		if avrMyLikes == avrLikes {
-//			similarity += 1
-//			continue
-//		}
-//		similarity += 1 / math.Abs(avrMyLikes-avrLikes)
-//	}
-//	return similarity
-//}
-
-//func (a *AccountMin) CheckSimilarity(account AccountMin) float64 {
-//	var similarity float64
-//	for i := range account.Likes {
-//		for ii := range a.Likes {
-//			if account.Likes[i].ID == a.Likes[ii].ID {
-//				if account.Likes[i].TS != a.Likes[ii].TS {
-//					similarity += 1 / math.Abs(float64(account.Likes[i].TS-a.Likes[ii].TS))
-//				} else {
-//					similarity += 1
-//				}
-//			}
-//		}
-//
-//	}
-//	return similarity
-//}
-//
-//func (a *AccountMin) GetNewIds(account AccountMin) []int {
-//	var ids []int
-//	MainLoop:
-//	for i := range account.Likes {
-//		for ii := range a.Likes {
-//			if account.Likes[i].ID == a.Likes[ii].ID {
-//				continue MainLoop
-//			}
-//		}
-//		ids = append(ids, account.Likes[i].ID)
-//	}
-//	sort.Slice(ids, func(i, j int) bool {
-//		return ids[i] > ids[j]
-//	})
-//	return ids
-//}
-
-func (a *AccountMin) PrepareLikesMap() {
-	a.likesMap = make(map[int][]int)
-	for _, like := range a.Likes {
-		a.likesMap[like.ID] = append(a.likesMap[like.ID], like.TS)
-	}
-}
-
 func (a *AccountMin) CheckSimilarity(account AccountMin) float64 {
 	var similarity float64
-	account.PrepareLikesMap()
 	var avrLikes, avrMyLikes float64
-	for k, likes := range account.likesMap {
+	for k, likes := range account.LikesMap {
 		avrLikes, avrMyLikes = 0, 0
-		if myLikes, ok := a.likesMap[k]; ok {
+		if myLikes, ok := a.LikesMap[k]; ok {
 			for _, myLike := range myLikes {
 				avrMyLikes += float64(myLike)
 			}
@@ -178,9 +111,8 @@ func (a *AccountMin) CheckSimilarity(account AccountMin) float64 {
 
 func (a *AccountMin) GetNewIds(account AccountMin) []int {
 	var ids []int
-	account.PrepareLikesMap()
-	for k, _ := range account.likesMap {
-		if _, ok := a.likesMap[k]; !ok {
+	for k := range account.LikesMap {
+		if _, ok := a.LikesMap[k]; !ok {
 			ids = append(ids, k)
 		}
 	}

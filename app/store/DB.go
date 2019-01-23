@@ -91,7 +91,6 @@ func (db *DB) AddAccount(account models.Account) {
 		Birth:   account.Birth,
 		Joined:  account.Joined,
 		Premium: account.Premium,
-		Likes:   account.Likes,
 	}
 
 	accountMin.FName = uint8(len(db.fnames))
@@ -150,20 +149,25 @@ func (db *DB) AddAccount(account models.Account) {
 	}
 
 	var interests []uint8
-	for _, interest := range account.Interests {
+	for i := range account.Interests {
 		interestId := uint8(len(db.interests))
 		for k, v := range db.interests {
-			if v == interest {
+			if v == account.Interests[i] {
 				interestId = k
 				break
 			}
 		}
 		if interestId == uint8(len(db.interests)) {
-			db.interests[interestId] = interest
+			db.interests[interestId] = account.Interests[i]
 		}
 		interests = append(interests, interestId)
 	}
 	accountMin.Interests = interests
+
+	accountMin.LikesMap = make(map[int][]int)
+	for i := range account.Likes {
+		accountMin.LikesMap[account.Likes[i].ID] = append(accountMin.LikesMap[account.Likes[i].ID], account.Likes[i].TS)
+	}
 
 	db.accountsMin = append(db.accountsMin, accountMin)
 
@@ -351,10 +355,8 @@ MainLoop:
 			case "likes_contains":
 			LikesContainsLoop:
 				for ii := range v.([]int) {
-					for iii := range accountMin.Likes {
-						if accountMin.Likes[iii].ID == v.([]int)[ii] {
-							continue LikesContainsLoop
-						}
+					if _, ok := accountMin.LikesMap[v.([]int)[ii]]; ok {
+						continue LikesContainsLoop
 					}
 					continue MainLoop
 				}
@@ -469,10 +471,8 @@ MainLoop:
 				}
 				continue MainLoop
 			case "likes":
-				for iii := range accountMin.Likes {
-					if accountMin.Likes[iii].ID == v.(int) {
-						continue InnerLoop
-					}
+				if _, ok := accountMin.LikesMap[v.(int)]; ok {
+					continue InnerLoop
 				}
 				continue MainLoop
 			}
@@ -711,14 +711,9 @@ MainLoop:
 		}
 
 		found := false
-		for ii := range accountMinForFind.Likes {
-			for iii := range accountMin.Likes {
-				if accountMin.Likes[iii].ID == accountMinForFind.Likes[ii].ID {
-					found = true
-					break
-				}
-			}
-			if found {
+		for k := range accountMinForFind.LikesMap {
+			if _, ok := accountMin.LikesMap[k]; ok {
+				found = true
 				break
 			}
 		}
@@ -728,12 +723,6 @@ MainLoop:
 
 		accountsMin = append(accountsMin, accountMin)
 	}
-
-	accountMinForFind.PrepareLikesMap()
-
-	//sort.Slice(accountsMin, func(i, j int) bool {
-	//	return accountMinForFind.CheckSimilarity(accountsMin[i]) > accountMinForFind.CheckSimilarity(accountsMin[j])
-	//})
 
 	parallelMergeSort(accountsMin, accountMinForFind)
 
