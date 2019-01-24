@@ -43,6 +43,7 @@ func NewDB() *DB {
 			cities:      map[uint16]string{},
 			status:      map[byte]string{0: "свободны", 1: "заняты", 2: "всё сложно"},
 			interests:   map[uint8]string{},
+			likes:       map[int]map[int][]int{},
 		},
 	}
 }

@@ -17,14 +17,14 @@ const (
 	listenAddrEnvName = "SERVER_ADDR"
 	defaultListenAddr = ":80"
 
-	optionsFilePath = "/tmp/data/options.txt" //todo docker
-	dataFilePath    = "/tmp/data/data.zip"
+	//optionsFilePath = "/tmp/data/options.txt" //todo docker
+	//dataFilePath    = "/tmp/data/data.zip"
 
 	//optionsFilePath = "/home/zzsdeo/tmp/data/options.txt" //todo hp
 	//dataFilePath    = "/home/zzsdeo/tmp/data/data.zip"
 
-	//optionsFilePath = "./tmp/data/options.txt" //todo home
-	//dataFilePath    = "./tmp/data/data.zip"
+	optionsFilePath = "./tmp/data/options.txt" //todo home
+	dataFilePath    = "./tmp/data/data.zip"
 )
 
 type opts struct {

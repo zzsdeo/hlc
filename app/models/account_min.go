@@ -1,8 +1,6 @@
 package models
 
 import (
-	"math"
-	"sort"
 	"time"
 )
 
@@ -85,42 +83,42 @@ func (a *AccountMin) CheckCompatibility(account AccountMin, now int) int {
 
 func (a *AccountMin) CheckSimilarity(account AccountMin) float64 {
 	var similarity float64
-	account.PrepareLikesMap()
-	var avrLikes, avrMyLikes float64
-	for k, likes := range account.likesMap {
-		avrLikes, avrMyLikes = 0, 0
-		if myLikes, ok := a.likesMap[k]; ok {
-			for _, myLike := range myLikes {
-				avrMyLikes += float64(myLike)
-			}
-			avrMyLikes /= float64(len(myLikes))
-
-			for _, like := range likes {
-				avrLikes += float64(like)
-			}
-			avrLikes /= float64(len(likes))
-
-			if avrMyLikes == avrLikes {
-				similarity += 1
-				continue
-			}
-
-			similarity += 1 / math.Abs(avrMyLikes-avrLikes)
-		}
-	}
+	//account.PrepareLikesMap()
+	//var avrLikes, avrMyLikes float64
+	//for k, likes := range account.likesMap {
+	//	avrLikes, avrMyLikes = 0, 0
+	//	if myLikes, ok := a.likesMap[k]; ok {
+	//		for _, myLike := range myLikes {
+	//			avrMyLikes += float64(myLike)
+	//		}
+	//		avrMyLikes /= float64(len(myLikes))
+	//
+	//		for _, like := range likes {
+	//			avrLikes += float64(like)
+	//		}
+	//		avrLikes /= float64(len(likes))
+	//
+	//		if avrMyLikes == avrLikes {
+	//			similarity += 1
+	//			continue
+	//		}
+	//
+	//		similarity += 1 / math.Abs(avrMyLikes-avrLikes)
+	//	}
+	//}
 	return similarity
 }
 
 func (a *AccountMin) GetNewIds(account AccountMin) []int {
 	var ids []int
-	account.PrepareLikesMap()
-	for k, _ := range account.likesMap {
-		if _, ok := a.likesMap[k]; !ok {
-			ids = append(ids, k)
-		}
-	}
-	sort.Slice(ids, func(i, j int) bool {
-		return ids[i] > ids[j]
-	})
+	//account.PrepareLikesMap()
+	//for k, _ := range account.likesMap {
+	//	if _, ok := a.likesMap[k]; !ok {
+	//		ids = append(ids, k)
+	//	}
+	//}
+	//sort.Slice(ids, func(i, j int) bool {
+	//	return ids[i] > ids[j]
+	//})
 	return ids
 }
