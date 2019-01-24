@@ -2,15 +2,20 @@ package rest
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/mailru/easyjson"
 	"github.com/valyala/fasthttp"
 	"hlc/app/models"
 	"hlc/app/store"
 	"log"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
+
+var stat []time.Duration
 
 type queryKeys struct {
 	Sex               []byte
@@ -79,6 +84,8 @@ func (a *App) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 			a.recommend(ctx)
 		} else if strings.HasSuffix(string(ctx.Path()), "/suggest/") {
 			a.suggest(ctx)
+		} else if string(ctx.Path()) == "/stat/" {
+			a.stat(ctx)
 		} else {
 			ctx.SetStatusCode(fasthttp.StatusNotFound)
 		}
@@ -156,6 +163,14 @@ func (a *App) SortDB() {
 func (a *App) Run(listenAddr string) {
 	log.Println("[INFO] start server on", listenAddr)
 	log.Fatal("[ERROR] ", fasthttp.ListenAndServe(listenAddr, a.HandleFastHTTP))
+}
+
+func (a *App) stat(ctx *fasthttp.RequestCtx) {
+	sort.Slice(stat, func(i, j int) bool {
+		return stat[i] > stat[j]
+	})
+	ctx.WriteString(fmt.Sprint(stat))
+	ctx.SetStatusCode(fasthttp.StatusOK)
 }
 
 func (a *App) filter(ctx *fasthttp.RequestCtx) {
@@ -314,7 +329,11 @@ func (a *App) filter(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	start := time.Now()
+
 	accounts := a.db.Find(query)
+
+	stat = append(stat, time.Since(start))
 
 	b, err := easyjson.Marshal(&accounts)
 	if err != nil {
@@ -459,7 +478,11 @@ func (a *App) group(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	start := time.Now()
+
 	groups := a.db.Group(query)
+
+	stat = append(stat, time.Since(start))
 
 	b, err := easyjson.Marshal(&groups)
 	if err != nil {
@@ -540,7 +563,12 @@ func (a *App) recommend(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	start := time.Now()
+
 	accounts, ok := a.db.Recommend(id, a.now, query)
+
+	stat = append(stat, time.Since(start))
+
 	if !ok {
 		a.mu.Lock()
 		a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = []byte("?")
@@ -628,7 +656,12 @@ func (a *App) suggest(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	start := time.Now()
+
 	accounts, ok := a.db.Suggest(id, query)
+
+	stat = append(stat, time.Since(start))
+
 	if !ok {
 		a.mu.Lock()
 		a.cache[ctx.QueryArgs().GetUintOrZero("query_id")] = []byte("?")
@@ -691,29 +724,4 @@ func (a *App) fromCache(ctx *fasthttp.RequestCtx) bool {
 		}
 	}
 	return false
-
-	//if b, ok := a.cache[ctx.QueryArgs().GetUintOrZero("query_id")]; ok {
-	//	if string(b) != "-" {
-	//		_, err := ctx.Write(b)
-	//		if err != nil {
-	//			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-	//			log.Println("[ERROR] ", err)
-	//			return true
-	//		}
-	//
-	//		ctx.SetStatusCode(fasthttp.StatusOK)
-	//		return true
-	//	}
-	//
-	//	_, err := ctx.Write([]byte{})
-	//	if err != nil {
-	//		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-	//		log.Println("[ERROR] ", err)
-	//		return true
-	//	}
-	//
-	//	ctx.SetStatusCode(fasthttp.StatusBadRequest)
-	//	return true
-	//}
-	//return false
 }

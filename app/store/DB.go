@@ -731,10 +731,6 @@ MainLoop:
 
 	accountMinForFind.PrepareLikesMap()
 
-	//sort.Slice(accountsMin, func(i, j int) bool {
-	//	return accountMinForFind.CheckSimilarity(accountsMin[i]) > accountMinForFind.CheckSimilarity(accountsMin[j])
-	//})
-
 	parallelMergeSort(accountsMin, accountMinForFind)
 
 	ids := make([]int, 0)
