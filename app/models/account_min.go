@@ -18,8 +18,6 @@ type AccountMin struct {
 	Status    byte    //0-"свободны", 1-"заняты", 2-"всё сложно"
 	Interests []uint8 //every string is up to 100 symbols, optional
 	Premium   *Premium
-	//Likes     []Like
-	//likesMap  map[int][]int
 }
 
 func (a *AccountMin) PremiumNow(now int) bool {
