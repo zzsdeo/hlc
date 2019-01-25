@@ -58,11 +58,11 @@ func main() {
 		app.LoadData(data.Accounts)
 	}
 
-	app.CheckDB()
+	//app.CheckDB()
 
-	app.DropAllIndexes()
+	//app.DropAllIndexes()
 
-	app.CreateIndexes(false)
+	//app.CreateIndexes(false)
 
 	app.Run(opts.listenAddr)
 }

@@ -2,9 +2,6 @@ package rest
 
 import (
 	"encoding/json"
-	"github.com/globalsign/mgo"
-	"github.com/globalsign/mgo/bson"
-	"github.com/gorilla/mux"
 	"hlc/app/models"
 	"io"
 	"log"
@@ -13,6 +10,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/globalsign/mgo"
+	"github.com/globalsign/mgo/bson"
+	"github.com/gorilla/mux"
 )
 
 const (
@@ -102,43 +103,43 @@ func (a *App) CreateIndexes(background bool) {
 	defer session.Close()
 	collection := session.DB(dbName).C(accountsCollectionName)
 
+	// err := collection.EnsureIndex(mgo.Index{
+	// 	Key:        []string{"id"},
+	// 	Background: background,
+	// })
+
+	// if err != nil {
+	// 	log.Println("[ERROR] ", err)
+	// }
+
+	// err = collection.EnsureIndex(mgo.Index{
+	// 	Key:        []string{"country"},
+	// 	Background: background,
+	// })
+
+	// if err != nil {
+	// 	log.Println("[ERROR] ", err)
+	// }
+
+	// err = collection.EnsureIndex(mgo.Index{
+	// 	Key:        []string{"city"},
+	// 	Background: background,
+	// })
+
+	// if err != nil {
+	// 	log.Println("[ERROR] ", err)
+	// }
+
+	// err = collection.EnsureIndex(mgo.Index{
+	// 	Key:        []string{"birth"},
+	// 	Background: background,
+	// })
+
+	// if err != nil {
+	// 	log.Println("[ERROR] ", err)
+	// }
+
 	err := collection.EnsureIndex(mgo.Index{
-		Key:        []string{"id"},
-		Background: background,
-	})
-
-	if err != nil {
-		log.Println("[ERROR] ", err)
-	}
-
-	err = collection.EnsureIndex(mgo.Index{
-		Key:        []string{"country"},
-		Background: background,
-	})
-
-	if err != nil {
-		log.Println("[ERROR] ", err)
-	}
-
-	err = collection.EnsureIndex(mgo.Index{
-		Key:        []string{"city"},
-		Background: background,
-	})
-
-	if err != nil {
-		log.Println("[ERROR] ", err)
-	}
-
-	err = collection.EnsureIndex(mgo.Index{
-		Key:        []string{"birth"},
-		Background: background,
-	})
-
-	if err != nil {
-		log.Println("[ERROR] ", err)
-	}
-
-	err = collection.EnsureIndex(mgo.Index{
 		Key:        []string{"interests"},
 		Background: background,
 	})
@@ -156,14 +157,14 @@ func (a *App) CreateIndexes(background bool) {
 		log.Println("[ERROR] ", err)
 	}
 
-	err = collection.EnsureIndex(mgo.Index{
-		Key:        []string{"joined"},
-		Background: background,
-	})
+	// err = collection.EnsureIndex(mgo.Index{
+	// 	Key:        []string{"joined"},
+	// 	Background: background,
+	// })
 
-	if err != nil {
-		log.Println("[ERROR] ", err)
-	}
+	// if err != nil {
+	// 	log.Println("[ERROR] ", err)
+	// }
 
 	err = collection.EnsureIndex(mgo.Index{
 		Key:        []string{"email"},
@@ -174,59 +175,59 @@ func (a *App) CreateIndexes(background bool) {
 		log.Println("[ERROR] ", err)
 	}
 
-	err = collection.EnsureIndex(mgo.Index{
-		Key:        []string{"fname"},
-		Background: background,
-	})
+	// err = collection.EnsureIndex(mgo.Index{
+	// 	Key:        []string{"fname"},
+	// 	Background: background,
+	// })
 
-	if err != nil {
-		log.Println("[ERROR] ", err)
-	}
+	// if err != nil {
+	// 	log.Println("[ERROR] ", err)
+	// }
 
-	err = collection.EnsureIndex(mgo.Index{
-		Key:        []string{"sname"},
-		Background: background,
-	})
+	// err = collection.EnsureIndex(mgo.Index{
+	// 	Key:        []string{"sname"},
+	// 	Background: background,
+	// })
 
-	if err != nil {
-		log.Println("[ERROR] ", err)
-	}
+	// if err != nil {
+	// 	log.Println("[ERROR] ", err)
+	// }
 
-	err = collection.EnsureIndex(mgo.Index{
-		Key:        []string{"phone"},
-		Background: background,
-	})
+	// err = collection.EnsureIndex(mgo.Index{
+	// 	Key:        []string{"phone"},
+	// 	Background: background,
+	// })
 
-	if err != nil {
-		log.Println("[ERROR] ", err)
-	}
+	// if err != nil {
+	// 	log.Println("[ERROR] ", err)
+	// }
 
-	err = collection.EnsureIndex(mgo.Index{
-		Key:        []string{"sex"},
-		Background: background,
-	})
+	// err = collection.EnsureIndex(mgo.Index{
+	// 	Key:        []string{"sex"},
+	// 	Background: background,
+	// })
 
-	if err != nil {
-		log.Println("[ERROR] ", err)
-	}
+	// if err != nil {
+	// 	log.Println("[ERROR] ", err)
+	// }
 
-	err = collection.EnsureIndex(mgo.Index{
-		Key:        []string{"status"},
-		Background: background,
-	})
+	// err = collection.EnsureIndex(mgo.Index{
+	// 	Key:        []string{"status"},
+	// 	Background: background,
+	// })
 
-	if err != nil {
-		log.Println("[ERROR] ", err)
-	}
+	// if err != nil {
+	// 	log.Println("[ERROR] ", err)
+	// }
 
-	err = collection.EnsureIndex(mgo.Index{
-		Key:        []string{"premium"},
-		Background: background,
-	})
+	// err = collection.EnsureIndex(mgo.Index{
+	// 	Key:        []string{"premium"},
+	// 	Background: background,
+	// })
 
-	if err != nil {
-		log.Println("[ERROR] ", err)
-	}
+	// if err != nil {
+	// 	log.Println("[ERROR] ", err)
+	// }
 
 	if !background {
 		log.Println("[INFO] indexing finished")

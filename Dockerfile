@@ -24,4 +24,4 @@ ENTRYPOINT ["/root/run.sh"]
 WORKDIR /root/
 COPY --from=builder /go/src/hlc/app/app .
 EXPOSE 80
-CMD ["sh", "-c", "(mongod --bind_ip 0.0.0.0 &) && ./app"]
+CMD ["sh", "-c", "(mongod --bind_ip 0.0.0.0 --smallfiles --noprealloc --nojournal &) && ./app"]
