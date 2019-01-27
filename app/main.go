@@ -41,10 +41,6 @@ func main() {
 
 	parseData(app)
 
-	app.SortDB()
-
-	runtime.GC()
-
 	app.Run(opts.listenAddr)
 }
 

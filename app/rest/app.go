@@ -93,7 +93,12 @@ func (a *App) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 }
 
 func (a *App) Initialize(now int) {
-	a.db = store.NewDB()
+	db, err := store.NewDB()
+	if err != nil {
+		log.Fatal("[ERROR] ", err)
+	}
+	a.db = db
+
 	a.now = now
 
 	a.cache = make(map[int][]byte, 90000)
@@ -144,18 +149,12 @@ func (a *App) Initialize(now int) {
 }
 
 func (a *App) LoadData(accounts []models.Account) {
-	a.db.LoadData(accounts)
+	a.db.LoadData(accounts, a.now)
 	log.Println("[INFO] added ", len(accounts), " accounts")
 }
 
 func (a *App) AddAccount(account models.Account) {
-	a.db.AddAccount(account)
-}
-
-func (a *App) SortDB() {
-	log.Println("[INFO] sorting...")
-	a.db.SortDB()
-	log.Println("[INFO] sorting finished")
+	a.db.AddAccount(account, a.now)
 }
 
 func (a *App) Run(listenAddr string) {
@@ -243,22 +242,22 @@ func (a *App) filter(ctx *fasthttp.RequestCtx) {
 			query["city_null"] = string(value)
 			return
 		} else if bytes.Equal(key, a.BirthLt) {
-			birth, err := strconv.Atoi(string(value))
+			_, err := strconv.Atoi(string(value))
 			if err != nil {
 				log.Println("[ERROR] ", err)
 				isBadArg = true
 				return
 			}
-			query["birth_lt"] = birth
+			query["birth_lt"] = string(value)
 			return
 		} else if bytes.Equal(key, a.BirthGt) {
-			birth, err := strconv.Atoi(string(value))
+			_, err := strconv.Atoi(string(value))
 			if err != nil {
 				log.Println("[ERROR] ", err)
 				isBadArg = true
 				return
 			}
-			query["birth_gt"] = birth
+			query["birth_gt"] = string(value)
 			return
 		} else if bytes.Equal(key, a.BirthYear) {
 			year, err := strconv.Atoi(string(value))
@@ -277,17 +276,16 @@ func (a *App) filter(ctx *fasthttp.RequestCtx) {
 			return
 		} else if bytes.Equal(key, a.LikesContains) {
 			likes := strings.Split(string(value), ",")
-			likeIds := make([]int, 0)
+			likeIds := make([]string, 0)
 			for _, like := range likes {
-				l, err := strconv.Atoi(like)
+				_, err := strconv.Atoi(like)
 				if err != nil {
 					log.Println("[ERROR] ", err)
 					isBadArg = true
 					return
 				}
-				likeIds = append(likeIds, l)
+				likeIds = append(likeIds, like)
 			}
-			//log.Println("[DEBUG] ", likeIds)
 			query["likes_contains"] = likeIds
 			return
 		} else if bytes.Equal(key, a.PremiumNow) {
@@ -307,7 +305,7 @@ func (a *App) filter(ctx *fasthttp.RequestCtx) {
 				isBadArg = true
 				return
 			}
-			query["limit"] = limit
+			query["limit"] = string(value)
 			return
 		} else if bytes.Equal(key, a.QueryId) {
 			return
@@ -690,36 +688,36 @@ func (a *App) suggest(ctx *fasthttp.RequestCtx) {
 }
 
 func (a *App) fromCache(ctx *fasthttp.RequestCtx) bool {
-	if b, ok := a.cache[ctx.QueryArgs().GetUintOrZero("query_id")]; ok {
-		switch string(b) {
-		case "-":
-			_, err := ctx.Write([]byte{})
-			if err != nil {
-				ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-				log.Println("[ERROR] ", err)
-				return true
-			}
-			ctx.SetStatusCode(fasthttp.StatusBadRequest)
-			return true
-		case "?":
-			_, err := ctx.Write([]byte{})
-			if err != nil {
-				ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-				log.Println("[ERROR] ", err)
-				return true
-			}
-			ctx.SetStatusCode(fasthttp.StatusNotFound)
-			return true
-		default:
-			_, err := ctx.Write(b)
-			if err != nil {
-				ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-				log.Println("[ERROR] ", err)
-				return true
-			}
-			ctx.SetStatusCode(fasthttp.StatusOK)
-			return true
-		}
-	}
+	// if b, ok := a.cache[ctx.QueryArgs().GetUintOrZero("query_id")]; ok { TODO:
+	// 	switch string(b) {
+	// 	case "-":
+	// 		_, err := ctx.Write([]byte{})
+	// 		if err != nil {
+	// 			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+	// 			log.Println("[ERROR] ", err)
+	// 			return true
+	// 		}
+	// 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+	// 		return true
+	// 	case "?":
+	// 		_, err := ctx.Write([]byte{})
+	// 		if err != nil {
+	// 			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+	// 			log.Println("[ERROR] ", err)
+	// 			return true
+	// 		}
+	// 		ctx.SetStatusCode(fasthttp.StatusNotFound)
+	// 		return true
+	// 	default:
+	// 		_, err := ctx.Write(b)
+	// 		if err != nil {
+	// 			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+	// 			log.Println("[ERROR] ", err)
+	// 			return true
+	// 		}
+	// 		ctx.SetStatusCode(fasthttp.StatusOK)
+	// 		return true
+	// 	}
+	// }
 	return false
 }

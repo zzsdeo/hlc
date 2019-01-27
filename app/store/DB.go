@@ -1,12 +1,53 @@
 package store
 
 import (
+	"database/sql"
+	"fmt"
 	"hlc/app/models"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
+
+	_ "github.com/mattn/go-sqlite3"
 )
+
+const createDB = `
+CREATE TABLE accounts (
+	id INTEGER PRIMARY KEY NOT NULL,
+	email TEXT NOT NULL,
+	fname TEXT NOT NULL,
+	sname TEXT NOT NULL,
+	phone TEXT NOT NULL,
+	sex TEXT NOT NULL,
+	birth INTEGER NOT NULL,
+	country TEXT NOT NULL,
+	city TEXT NOT NULL,
+	joined INTEGER NOT NULL,
+	status TEXT NOT NULL
+) WITHOUT ROWID;
+CREATE TABLE likes (
+	id INTEGER NOT NULL,
+	ts INTEGER NOT NULL,
+	accountid INTEGER NOT NULL,
+	FOREIGN KEY (accountid) REFERENCES accounts(id),
+	FOREIGN KEY (id) REFERENCES accounts(id)
+);
+CREATE TABLE interests (
+	interest TEXT NOT NULL,
+	accountid INTEGER NOT NULL,
+	FOREIGN KEY (accountid) REFERENCES accounts(id)
+);
+CREATE TABLE premiums (
+	start INTEGER NOT NULL,
+	finish INTEGER NOT NULL,
+	premium INTEGER NOT NULL,
+	accountid INTEGER NOT NULL,
+	FOREIGN KEY (accountid) REFERENCES accounts(id)
+);
+`
 
 type minData struct {
 	accountsMin []models.AccountMin
@@ -22,17 +63,34 @@ type minData struct {
 type DB struct {
 	minData
 	mu *sync.Mutex
-	wg *sync.WaitGroup
+
+	sql *sql.DB
 }
 
 type void struct{}
 
 type M map[string]interface{}
 
-func NewDB() *DB {
+func NewDB() (*DB, error) {
+
+	sql, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		return nil, err
+	}
+
+	sql.SetMaxOpenConns(0)
+	err = sql.Ping()
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = sql.Exec(createDB)
+	if err != nil {
+		return nil, err
+	}
+
 	return &DB{
 		mu: &sync.Mutex{},
-		wg: &sync.WaitGroup{},
 		minData: minData{
 			accountsMin: []models.AccountMin{},
 			fnames:      map[uint8]string{},
@@ -43,385 +101,303 @@ func NewDB() *DB {
 			status:      map[byte]string{0: "свободны", 1: "заняты", 2: "всё сложно"},
 			interests:   map[uint8]string{},
 		},
-	}
+		sql: sql,
+	}, nil
 }
 
-func (db *DB) LoadData(accounts []models.Account) {
-	//jobs := make(chan models.Account, len(accounts))
-	//numOfWorkers := 100
-	//for numOfWorkers >= 0 {
-	//	db.wg.Add(1)
-	//	go db.accountWorker(jobs)
-	//	numOfWorkers--
-	//}
-	//for i := range accounts {
-	//	jobs <- accounts[i]
-	//}
-	//close(jobs)
-
+func (db *DB) LoadData(accounts []models.Account, now int) {
 	for i := range accounts {
-		db.AddAccount(accounts[i])
+		db.AddAccount(accounts[i], now)
 	}
 }
 
-func (db *DB) SortDB() {
-	//db.wg.Wait()
-	sort.Slice(db.accountsMin, func(i, j int) bool {
-		return db.accountsMin[i].ID > db.accountsMin[j].ID
-	})
-	for _, a := range db.accountsMin[:10] {
-		log.Println(a.ID)
+func (db *DB) AddAccount(account models.Account, now int) {
+	db.sql.Exec("INSERT INTO accounts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		account.ID,
+		account.Email,
+		account.FName,
+		account.SName,
+		account.Phone,
+		account.Sex,
+		account.Birth,
+		account.Country,
+		account.City,
+		account.Joined,
+		account.Status,
+	)
+	for i := range account.Interests {
+		db.sql.Exec("INSERT INTO interests VALUES (?, ?)",
+			account.Interests[i], account.ID)
 	}
-	//log.Println("size", utils.Sizeof(db.accountsMin, db.interests, db.snames, db.cities, db.countries, db.fnames, db.sex, db.status))
-}
-
-func (db *DB) accountWorker(jobs <-chan models.Account) {
-	for j := range jobs {
-		db.AddAccount(j)
-	}
-	db.wg.Done()
-}
-
-func (db *DB) AddAccount(account models.Account) {
-	db.mu.Lock()
-	accountMin := models.AccountMin{
-		ID:      account.ID,
-		Email:   account.Email,
-		Phone:   account.Phone,
-		Birth:   account.Birth,
-		Joined:  account.Joined,
-		Premium: account.Premium,
-		Likes:   account.Likes,
+	for i := range account.Likes {
+		db.sql.Exec("INSERT INTO likes VALUES (?, ?, ?)",
+			account.Likes[i].ID, account.Likes[i].TS, account.ID)
 	}
 
-	accountMin.FName = uint8(len(db.fnames))
-	for k, v := range db.fnames {
-		if v == account.FName {
-			accountMin.FName = k
-			break
-		}
+	if account.Premium != nil {
+		db.sql.Exec("INSERT INTO premiums VALUES (?, ?, ?, ?)",
+			account.Premium.Start, account.Premium.Finish, account.PremiumNow(now), account.ID)
+	} else {
+		db.sql.Exec("INSERT INTO premiums VALUES (?, ?, ?, ?)",
+			0, 0, account.PremiumNow(now), account.ID)
 	}
-	if accountMin.FName == uint8(len(db.fnames)) {
-		db.fnames[accountMin.FName] = account.FName
-	}
-
-	accountMin.SName = uint16(len(db.snames))
-	for k, v := range db.snames {
-		if v == account.SName {
-			accountMin.SName = k
-			break
-		}
-	}
-	if accountMin.SName == uint16(len(db.snames)) {
-		db.snames[accountMin.SName] = account.SName
-	}
-
-	if account.Sex == "f" {
-		accountMin.Sex = 1
-	}
-
-	accountMin.Country = uint8(len(db.countries))
-	for k, v := range db.countries {
-		if v == account.Country {
-			accountMin.Country = k
-			break
-		}
-	}
-	if accountMin.Country == uint8(len(db.countries)) {
-		db.countries[accountMin.Country] = account.Country
-	}
-
-	accountMin.City = uint16(len(db.cities))
-	for k, v := range db.cities {
-		if v == account.City {
-			accountMin.City = k
-			break
-		}
-	}
-	if accountMin.City == uint16(len(db.cities)) {
-		db.cities[accountMin.City] = account.City
-	}
-
-	switch account.Status {
-	case "заняты":
-		accountMin.Status = 1
-	case "всё сложно":
-		accountMin.Status = 2
-	}
-
-	var interests []uint8
-	for _, interest := range account.Interests {
-		interestId := uint8(len(db.interests))
-		for k, v := range db.interests {
-			if v == interest {
-				interestId = k
-				break
-			}
-		}
-		if interestId == uint8(len(db.interests)) {
-			db.interests[interestId] = interest
-		}
-		interests = append(interests, interestId)
-	}
-	accountMin.Interests = interests
-
-	db.accountsMin = append(db.accountsMin, accountMin)
-
-	db.mu.Unlock()
 }
 
 func (db *DB) Find(query M) models.Accounts {
 	projection := make(map[string]void)
-	limit := query["limit"].(int)
 	accounts := models.Accounts{}
 	accounts.Accounts = make([]models.Account, 0)
-MainLoop:
-	for _, accountMin := range db.accountsMin {
-	InnerLoop:
-		for k, v := range query {
-			switch k {
-			case "sex_eq":
-				if db.sex[accountMin.Sex] != v.(string) {
-					continue MainLoop
+
+	queryString := "SELECT id, email"
+	from := " FROM accounts"
+	whereClause := "WHERE"
+
+	for k, v := range query {
+		switch k {
+		case "sex_eq":
+			whereClause += " sex = '" + v.(string) + "' AND"
+			projection["sex"] = void{}
+		case "status_eq":
+			whereClause += " status = '" + v.(string) + "' AND"
+			projection["status"] = void{}
+		case "status_neq":
+			whereClause += " status != '" + v.(string) + "' AND"
+			projection["status"] = void{}
+		case "fname_eq":
+			whereClause += " fname = '" + v.(string) + "' AND"
+			projection["fname"] = void{}
+		case "fname_any":
+			c := "('" + v.([]string)[0] + "'"
+			if len(v.([]string)) > 1 {
+				for i := 1; i < len(v.([]string)); i++ {
+					c += ", '" + v.([]string)[i] + "'"
 				}
-				projection["sex"] = void{}
-			case "status_eq":
-				if db.status[accountMin.Status] != v.(string) {
-					continue MainLoop
-				}
-				projection["status"] = void{}
-			case "status_neq":
-				if db.status[accountMin.Status] == v.(string) {
-					continue MainLoop
-				}
-				projection["status"] = void{}
-			case "fname_eq":
-				if db.fnames[accountMin.FName] != v.(string) {
-					continue MainLoop
-				}
-				projection["fname"] = void{}
-			case "fname_any":
-				for ii := range v.([]string) {
-					if db.fnames[accountMin.FName] == v.([]string)[ii] {
-						projection["fname"] = void{}
-						continue InnerLoop
-					}
-				}
-				continue MainLoop
-			case "fname_null":
-				switch v.(string) {
-				case "0":
-					if db.fnames[accountMin.FName] == "" {
-						continue MainLoop
-					}
-				case "1":
-					if db.fnames[accountMin.FName] != "" {
-						continue MainLoop
-					}
-				}
-				projection["fname"] = void{}
-			case "sname_eq":
-				if db.snames[accountMin.SName] != v.(string) {
-					continue MainLoop
-				}
-				projection["sname"] = void{}
-			case "sname_null":
-				switch v.(string) {
-				case "0":
-					if db.snames[accountMin.SName] == "" {
-						continue MainLoop
-					}
-				case "1":
-					if db.snames[accountMin.SName] != "" {
-						continue MainLoop
-					}
-				}
-				projection["sname"] = void{}
-			case "phone_null":
-				switch v.(string) {
-				case "0":
-					if accountMin.Phone == "" {
-						continue MainLoop
-					}
-				case "1":
-					if accountMin.Phone != "" {
-						continue MainLoop
-					}
-				}
-				projection["phone"] = void{}
-			case "country_eq":
-				if db.countries[accountMin.Country] != v.(string) {
-					continue MainLoop
-				}
-				projection["country"] = void{}
-			case "country_null":
-				switch v.(string) {
-				case "0":
-					if db.countries[accountMin.Country] == "" {
-						continue MainLoop
-					}
-				case "1":
-					if db.countries[accountMin.Country] != "" {
-						continue MainLoop
-					}
-				}
-				projection["country"] = void{}
-			case "city_eq":
-				if db.cities[accountMin.City] != v.(string) {
-					continue MainLoop
-				}
-				projection["city"] = void{}
-			case "city_any":
-				for ii := range v.([]string) {
-					if db.cities[accountMin.City] == v.([]string)[ii] {
-						projection["city"] = void{}
-						continue InnerLoop
-					}
-				}
-				continue MainLoop
-			case "city_null":
-				switch v.(string) {
-				case "0":
-					if db.cities[accountMin.City] == "" {
-						continue MainLoop
-					}
-				case "1":
-					if db.cities[accountMin.City] != "" {
-						continue MainLoop
-					}
-				}
-				projection["city"] = void{}
-			case "email_domain":
-				if !strings.Contains(accountMin.Email, "@"+v.(string)) {
-					continue MainLoop
-				}
-			case "email_lt":
-				if accountMin.Email > v.(string) {
-					continue MainLoop
-				}
-			case "email_gt":
-				if accountMin.Email < v.(string) {
-					continue MainLoop
-				}
-			case "sname_starts":
-				if !strings.HasPrefix(db.snames[accountMin.SName], v.(string)) {
-					continue MainLoop
-				}
-				projection["sname"] = void{}
-			case "phone_code":
-				if !strings.Contains(accountMin.Phone, "("+v.(string)+")") {
-					continue MainLoop
-				}
-				projection["phone"] = void{}
-			case "birth_lt":
-				if accountMin.Birth > v.(int) {
-					continue MainLoop
-				}
-				projection["birth"] = void{}
-			case "birth_gt":
-				if accountMin.Birth < v.(int) {
-					continue MainLoop
-				}
-				projection["birth"] = void{}
-			case "birth_year":
-				if accountMin.CheckBirth(v.(int)) {
-					projection["birth"] = void{}
-					continue InnerLoop
-				}
-				continue MainLoop
-			case "interests_contains":
-			InterestsContainsLoop:
-				for ii := range v.([]string) {
-					for iii := range accountMin.Interests {
-						if db.interests[accountMin.Interests[iii]] == v.([]string)[ii] {
-							continue InterestsContainsLoop
-						}
-					}
-					continue MainLoop
-				}
-			case "interests_any":
-				for ii := range v.([]string) {
-					for iii := range accountMin.Interests {
-						if db.interests[accountMin.Interests[iii]] == v.([]string)[ii] {
-							continue InnerLoop
-						}
-					}
-				}
-				continue MainLoop
-			case "likes_contains":
-			LikesContainsLoop:
-				for ii := range v.([]int) {
-					for iii := range accountMin.Likes {
-						if accountMin.Likes[iii].ID == v.([]int)[ii] {
-							continue LikesContainsLoop
-						}
-					}
-					continue MainLoop
-				}
-			case "premium_now":
-				if !accountMin.PremiumNow(v.(int)) {
-					continue MainLoop
-				}
-				projection["premium"] = void{}
-			case "premium_null":
-				switch v.(string) {
-				case "0":
-					if accountMin.Premium == nil {
-						continue MainLoop
-					}
-				case "1":
-					if accountMin.Premium != nil {
-						continue MainLoop
-					}
-				}
-				projection["premium"] = void{}
 			}
+			c += ")"
+			whereClause += " fname IN " + c + " AND"
+			projection["fname"] = void{}
+		case "fname_null":
+			switch v.(string) {
+			case "0":
+				whereClause += " fname != '' AND"
+			case "1":
+				whereClause += " fname = '' AND"
+			}
+			projection["fname"] = void{}
+		case "sname_eq":
+			whereClause += " sname = '" + v.(string) + "' AND"
+			projection["sname"] = void{}
+		case "sname_null":
+			switch v.(string) {
+			case "0":
+				whereClause += " sname != '' AND"
+			case "1":
+				whereClause += " sname = '' AND"
+			}
+			projection["sname"] = void{}
+		case "phone_null":
+			switch v.(string) {
+			case "0":
+				whereClause += " phone != '' AND"
+			case "1":
+				whereClause += " phone = '' AND"
+			}
+			projection["phone"] = void{}
+		case "country_eq":
+			whereClause += " country = '" + v.(string) + "' AND"
+			projection["country"] = void{}
+		case "country_null":
+			switch v.(string) {
+			case "0":
+				whereClause += " country != '' AND"
+			case "1":
+				whereClause += " country = '' AND"
+			}
+			projection["country"] = void{}
+		case "city_eq":
+			whereClause += " city = '" + v.(string) + "' AND"
+			projection["city"] = void{}
+		case "city_any":
+			c := "('" + v.([]string)[0] + "'"
+			if len(v.([]string)) > 1 {
+				for i := 1; i < len(v.([]string)); i++ {
+					c += ", '" + v.([]string)[i] + "'"
+				}
+			}
+			c += ")"
+			whereClause += " city IN " + c + " AND"
+			projection["city"] = void{}
+		case "city_null":
+			switch v.(string) {
+			case "0":
+				whereClause += " city != '' AND"
+			case "1":
+				whereClause += " city = '' AND"
+			}
+			projection["city"] = void{}
+		case "email_domain":
+			whereClause += " email LIKE '%@" + v.(string) + "%' AND"
+		case "email_lt":
+			whereClause += " email < '" + v.(string) + "' AND"
+		case "email_gt":
+			whereClause += " email > '" + v.(string) + "' AND"
+		case "sname_starts":
+			whereClause += " sname LIKE '" + v.(string) + "%' AND"
+			projection["sname"] = void{}
+		case "phone_code":
+			whereClause += " phone LIKE '%(" + v.(string) + ")%' AND"
+			projection["phone"] = void{}
+		case "birth_lt":
+			whereClause += " birth < " + v.(string) + " AND"
+			projection["birth"] = void{}
+		case "birth_gt":
+			whereClause += " birth > " + v.(string) + " AND"
+			projection["birth"] = void{}
+		case "birth_year":
+			start := time.Date(v.(int), time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
+			finish := time.Date(v.(int)+1, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
+			whereClause += " birth >= " + strconv.Itoa(int(start)) + " AND birth < " + strconv.Itoa(int(finish)) + " AND"
+			//whereClause += " (birth BETWEEN " + strconv.Itoa(start) + " AND " + strconv.Itoa(finish) + ") AND"
+			projection["birth"] = void{}
+		case "interests_contains":
+			from += " JOIN interests ON interests.accountid = accounts.id"
+			c := "('" + v.([]string)[0] + "'"
+			if len(v.([]string)) > 1 {
+				for i := 1; i < len(v.([]string)); i++ {
+					c += ", '" + v.([]string)[i] + "'"
+				}
+			}
+			c += ")"
+			whereClause += " interest ALL " + c + " AND"
+		case "interests_any":
+			from += " INNER JOIN interests ON interests.accountid = accounts.id"
+			c := "('" + v.([]string)[0] + "'"
+			if len(v.([]string)) > 1 {
+				for i := 1; i < len(v.([]string)); i++ {
+					c += ", '" + v.([]string)[i] + "'"
+				}
+			}
+			c += ")"
+			whereClause += " interest IN " + c + " AND"
+		case "likes_contains":
+			from += " JOIN likes ON likes.accountid = accounts.id"
+			c := "(" + v.([]string)[0]
+			if len(v.([]string)) > 1 {
+				for i := 1; i < len(v.([]string)); i++ {
+					c += ", " + v.([]string)[i]
+				}
+			}
+			c += ")"
+			whereClause += " likes.id ALL " + c + " AND"
+		case "premium_now":
+			from += " JOIN premiums ON premiums.accountid = accounts.id"
+			whereClause += " premium = 2 AND"
+			projection["premium"] = void{}
+		case "premium_null":
+			from += " JOIN premiums ON premiums.accountid = accounts.id"
+			switch v.(string) {
+			case "0":
+				whereClause += " premium = 1 AND premium = 2 AND"
+			case "1":
+				whereClause += " premium = 0 AND"
+			}
+			projection["premium"] = void{}
 		}
-
-		if limit > 0 {
-			limit--
-			account := models.Account{ID: accountMin.ID, Email: accountMin.Email}
-
-			if _, ok := projection["fname"]; ok {
-				account.FName = db.fnames[accountMin.FName]
-			}
-
-			if _, ok := projection["sname"]; ok {
-				account.SName = db.snames[accountMin.SName]
-			}
-
-			if _, ok := projection["phone"]; ok {
-				account.Phone = accountMin.Phone
-			}
-
-			if _, ok := projection["sex"]; ok {
-				account.Sex = db.sex[accountMin.Sex]
-			}
-
-			if _, ok := projection["birth"]; ok {
-				account.Birth = accountMin.Birth
-			}
-
-			if _, ok := projection["country"]; ok {
-				account.Country = db.countries[accountMin.Country]
-			}
-
-			if _, ok := projection["city"]; ok {
-				account.City = db.cities[accountMin.City]
-			}
-
-			if _, ok := projection["status"]; ok {
-				account.Status = db.status[accountMin.Status]
-			}
-
-			if _, ok := projection["premium"]; ok {
-				account.Premium = accountMin.Premium
-			}
-
-			accounts.Accounts = append(accounts.Accounts, account)
-		}
-
 	}
+
+	if _, ok := projection["fname"]; ok {
+		queryString += ", fname"
+	}
+
+	if _, ok := projection["sname"]; ok {
+		queryString += ", sname"
+	}
+
+	if _, ok := projection["phone"]; ok {
+		queryString += ", phone"
+	}
+
+	if _, ok := projection["sex"]; ok {
+		queryString += ", sex"
+	}
+
+	if _, ok := projection["birth"]; ok {
+		queryString += ", birth"
+	}
+
+	if _, ok := projection["country"]; ok {
+		queryString += ", country"
+	}
+
+	if _, ok := projection["city"]; ok {
+		queryString += ", city"
+	}
+
+	if _, ok := projection["status"]; ok {
+		queryString += ", status"
+	}
+
+	if _, ok := projection["premium"]; ok {
+		queryString += ", premiums.start, premiums.finish"
+	}
+
+	if whereClause == "WHERE" {
+		whereClause = ""
+	} else {
+		whereClause = strings.TrimRight(whereClause, "AND")
+	}
+
+	queryString += from + " " + whereClause + "ORDER BY id DESC LIMIT " + query["limit"].(string)
+
+	fmt.Println(queryString) //TODO:
+
+	rows, err := db.sql.Query(queryString)
+	//rows, err := db.sql.Query("SELECT id, email, country FROM accounts WHERE country = 'Испмаль' ORDER BY id DESC LIMIT 20")
+	if err != nil {
+		log.Println("ERROR ", err)
+		return accounts
+	}
+
+	for rows.Next() {
+		account := &models.Account{}
+		columns, err := rows.Columns()
+		if err != nil {
+			log.Println("ERROR ", err)
+			return accounts
+		}
+		dest := make([]interface{}, 0)
+		for i := range columns {
+			switch columns[i] {
+			case "id":
+				dest = append(dest, &account.ID)
+			case "email":
+				dest = append(dest, &account.Email)
+			case "fname":
+				dest = append(dest, &account.FName)
+			case "sname":
+				dest = append(dest, &account.SName)
+			case "phone":
+				dest = append(dest, &account.Phone)
+			case "sex":
+				dest = append(dest, &account.Sex)
+			case "birth":
+				dest = append(dest, &account.Birth)
+			case "country":
+				dest = append(dest, &account.Country)
+			case "city":
+				dest = append(dest, &account.City)
+			case "status":
+				dest = append(dest, &account.Status)
+			case "premium":
+				dest = append(dest, &account.Premium.Start)
+				dest = append(dest, &account.Premium.Finish)
+			}
+		}
+		err = rows.Scan(dest...)
+		accounts.Accounts = append(accounts.Accounts, *account)
+	}
+	rows.Close()
+
 	return accounts
 }
 

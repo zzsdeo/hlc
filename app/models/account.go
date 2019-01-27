@@ -30,3 +30,13 @@ type Like struct {
 type Accounts struct {
 	Accounts []Account `json:"accounts"`
 }
+
+func (a *Account) PremiumNow(now int) int {
+	if a.Premium == nil {
+		return 0
+	}
+	if a.Premium.Start <= now && a.Premium.Finish >= now {
+		return 2
+	}
+	return 1
+}
