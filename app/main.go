@@ -7,8 +7,8 @@ import (
 	"hlc/app/rest"
 	"log"
 	"os"
-	"runtime"
 	"strconv"
+	"sync"
 
 	"github.com/bcicen/jstream"
 )
@@ -39,7 +39,9 @@ func main() {
 
 	app.Initialize(opts.now)
 
-	parseData(app)
+	wg := &sync.WaitGroup{}
+	parseData(app, wg)
+	wg.Wait()
 
 	app.Run(opts.listenAddr)
 }
@@ -71,7 +73,7 @@ func parseOpts() opts {
 	return opts
 }
 
-func parseData(app rest.App) {
+func parseData(app rest.App, wg *sync.WaitGroup) {
 	r, err := zip.OpenReader(dataFilePath)
 	if err != nil {
 		log.Fatal(err)
@@ -128,25 +130,46 @@ func parseData(app rest.App) {
 					})
 				}
 			}
-			app.AddAccount(models.Account{
-				ID:        int(accMap["id"].(float64)),
-				Email:     accMap["email"].(string),
-				FName:     fname,
-				SName:     sname,
-				Phone:     phone,
-				Sex:       accMap["sex"].(string),
-				Birth:     int(accMap["birth"].(float64)),
-				Country:   country,
-				City:      city,
-				Joined:    int(accMap["joined"].(float64)),
-				Status:    accMap["status"].(string),
-				Interests: interests,
-				Premium:   premium,
-				Likes:     likes,
-			})
-		}
 
-		runtime.GC()
+			wg.Add(1)
+			go func() {
+				app.AddAccount(models.Account{
+					ID:        int(accMap["id"].(float64)),
+					Email:     accMap["email"].(string),
+					FName:     fname,
+					SName:     sname,
+					Phone:     phone,
+					Sex:       accMap["sex"].(string),
+					Birth:     int(accMap["birth"].(float64)),
+					Country:   country,
+					City:      city,
+					Joined:    int(accMap["joined"].(float64)),
+					Status:    accMap["status"].(string),
+					Interests: interests,
+					Premium:   premium,
+					Likes:     likes,
+				})
+				wg.Done()
+			}()
+
+			// app.AddAccount(models.Account{
+			// 	ID:        int(accMap["id"].(float64)),
+			// 	Email:     accMap["email"].(string),
+			// 	FName:     fname,
+			// 	SName:     sname,
+			// 	Phone:     phone,
+			// 	Sex:       accMap["sex"].(string),
+			// 	Birth:     int(accMap["birth"].(float64)),
+			// 	Country:   country,
+			// 	City:      city,
+			// 	Joined:    int(accMap["joined"].(float64)),
+			// 	Status:    accMap["status"].(string),
+			// 	Interests: interests,
+			// 	Premium:   premium,
+			// 	Likes:     likes,
+			// })
+
+		}
 
 		err = file.Close()
 		if err != nil {

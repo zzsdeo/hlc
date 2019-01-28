@@ -73,7 +73,7 @@ type M map[string]interface{}
 
 func NewDB() (*DB, error) {
 
-	sql, err := sql.Open("sqlite3", ":memory:")
+	sql, err := sql.Open("sqlite3", "file::memory:?cache=shared&_journal=WAL&_fk=1&_locking=EXCLUSIVE&mode=rwc&_mutex=no")
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +260,7 @@ func (db *DB) Find(query M) models.Accounts {
 			//whereClause += " (birth BETWEEN " + strconv.Itoa(start) + " AND " + strconv.Itoa(finish) + ") AND"
 			projection["birth"] = void{}
 		case "interests_contains":
-			from += " JOIN interests ON interests.accountid = accounts.id"
+			from += " INNER JOIN interests ON interests.accountid = accounts.id"
 			c := "('" + v.([]string)[0] + "'"
 			if len(v.([]string)) > 1 {
 				for i := 1; i < len(v.([]string)); i++ {
@@ -280,7 +280,7 @@ func (db *DB) Find(query M) models.Accounts {
 			c += ")"
 			whereClause += " interest IN " + c + " AND"
 		case "likes_contains":
-			from += " JOIN likes ON likes.accountid = accounts.id"
+			from += " INNER JOIN likes ON likes.accountid = accounts.id"
 			c := "(" + v.([]string)[0]
 			if len(v.([]string)) > 1 {
 				for i := 1; i < len(v.([]string)); i++ {
@@ -290,11 +290,11 @@ func (db *DB) Find(query M) models.Accounts {
 			c += ")"
 			whereClause += " likes.id ALL " + c + " AND"
 		case "premium_now":
-			from += " JOIN premiums ON premiums.accountid = accounts.id"
+			from += " INNER JOIN premiums ON premiums.accountid = accounts.id"
 			whereClause += " premium = 2 AND"
 			projection["premium"] = void{}
 		case "premium_null":
-			from += " JOIN premiums ON premiums.accountid = accounts.id"
+			from += " INNER JOIN premiums ON premiums.accountid = accounts.id"
 			switch v.(string) {
 			case "0":
 				whereClause += " premium = 1 AND premium = 2 AND"
